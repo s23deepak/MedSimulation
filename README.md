@@ -39,6 +39,59 @@ Never run out of cases to practice. MedSimulation features a robust ingestion pi
 
 ---
 
+## 🏗️ Architecture & API Flow
+
+The diagram below illustrates the comprehensive lifecycle of a Resident interacting with the system, highlighting the unified case generation pipeline:
+
+```mermaid
+sequenceDiagram
+    actor Resident
+    participant Frontend as simulation.html
+    participant API as main.py (FastAPI)
+    participant Scrapers as Case Sources
+    participant AI as vLLMs (medgemma)
+    participant DB as SQLite / medsim.db
+
+    Resident->>Frontend: Search Topic (e.g., "Asthma")
+    Frontend->>API: POST /api/cases/generate<br/>{topic: "Asthma", source: "pubmed"}
+    
+    API->>Scrapers: Route to pubmed.search_pubmed_cases()
+    Scrapers-->>API: Returns PMCID & XML metadata
+    
+    rect rgb(240, 248, 255)
+    Note right of API: Phase G: Extract Images & Case Details
+    API->>Scrapers: Scrape <graphic> tags from PMC HTML
+    Scrapers-->>API: Clinical images & captions
+    end
+
+    API->>AI: prompt vLLM to construct ClinicalCase
+    AI-->>API: Structured Case JSON + Images
+    
+    API->>DB: save_case()
+    API-->>Frontend: {case_id: "DYN-XXX"}
+    
+    Frontend->>API: POST /api/simulation/start<br/>{case_id: "DYN-XXX"}
+    API->>DB: Initialize SimulationSession
+    API-->>Frontend: Session Data (Vitals, Presentation)
+    
+    loop Clinical Encounter
+        Resident->>Frontend: Ask History / Exam / Investigate
+        Frontend->>API: POST /api/simulation/...
+        API->>AI: generate_patient_response() OR grading
+        AI-->>API: Dialogue or Findings
+        API-->>Frontend: JSON Status Update
+    end
+    
+    Resident->>Frontend: Submit Diagnosis & Management
+    Frontend->>API: POST /api/simulation/submit
+    API->>AI: evaluate_case()
+    AI-->>API: Final Score (0-100) & Debrief
+    API->>DB: Save Completed Session
+    API-->>Frontend: Debrief Modal
+```
+
+---
+
 ## 🛠️ Tech Stack & Setup
 
 **Backend**:

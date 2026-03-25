@@ -143,6 +143,69 @@ async def fetch_wiley_fulltext(doi: str) -> str | None:
         logger.warning("Failed to fetch Wiley full text for %s: %s", doi, e)
         return None
 
+# ── Image Extraction ──────────────────────────────────────────────────────────
+
+async def extract_wiley_images(url: str) -> list[dict]:
+    """Scrape image URLs and captions from a Wiley Open Access HTML page."""
+    if not url or "onlinelibrary.wiley.com" not in url:
+        return []
+        
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 MedSimulation Bot"})
+            if r.status_code != 200:
+                return []
+        except Exception as e:
+            logger.warning("Failed to fetch Wiley page %s: %s", url, e)
+            return []
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(r.text, "html.parser")
+    
+    images = []
+    # Wiley figures are typically inside <figure>
+    for fig in soup.find_all("figure"):
+        img = fig.find("img")
+        if not img or not img.get("src"):
+            continue
+            
+        src = img["src"]
+        if src.startswith("/"):
+            src = "https://onlinelibrary.wiley.com" + src
+            
+        # Ignore structural/UI images
+        if "icon" in src.lower() or "logo" in src.lower() or "altmetric" in src.lower():
+            continue
+            
+        # Get caption
+        caption_tag = fig.find("figcaption")
+        caption = caption_tag.get_text(separator=" ", strip=True) if caption_tag else "Clinical Image"
+        
+        # Determine modality
+        mod = caption.lower()
+        if any(x in mod for x in ["x-ray", "radiograph", "cxr"]):
+            modality = "XR"
+        elif any(x in mod for x in ["ct ", "computed tomography"]):
+            modality = "CT"
+        elif any(x in mod for x in ["mri", "magnetic resonance"]):
+            modality = "MRI"
+        elif any(x in mod for x in ["ecg", "electrocardiogram"]):
+            modality = "ECG"
+        elif any(x in mod for x in ["ultrasound", "sonogram", "uss", "pocus"]):
+            modality = "US"
+        else:
+            modality = "PATH"
+            
+        images.append({
+            "study_id": f"IMG-WILEY-{len(images)+1}",
+            "modality": modality,
+            "description": (caption[:60] + "...") if len(caption) > 60 else caption,
+            "file_path": src,
+            "findings": caption,
+            "thumbnail": src
+        })
+        
+    return images
 
 # ── Full pipeline ─────────────────────────────────────────────────────────────
 
@@ -175,13 +238,26 @@ async def wiley_article_to_case(article: dict, vllm_client: Any) -> dict:
         f"{content}"
     )
 
-    return await generate_case(
+    case_dict = await generate_case(
         vllm_client,
         source_text=source_text,
         source_type="wiley",
         source_ref=article["doi"],
     )
-
+    
+    # Phase G: Extract images if public URL is available
+    if article.get("url"):
+        try:
+            images = await extract_wiley_images(article["url"])
+            if images:
+                if "imaging_studies" not in case_dict:
+                    case_dict["imaging_studies"] = []
+                case_dict["imaging_studies"].extend(images)
+                logger.info("Extracted %d images from %s", len(images), article["url"])
+        except Exception as e:
+            logger.warning("Error extracting images for %s: %s", article["url"], e)
+            
+    return case_dict
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

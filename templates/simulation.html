@@ -983,19 +983,45 @@
 
     <div class="sim-wrapper">
 
-        <!-- ══════════════════ SCREEN 1: LANDING ══════════════════ -->
+        <!-- ══════════════════ SCREEN 1: DASHBOARD ══════════════════ -->
         <div id="screen-landing" class="screen active">
-            <div class="landing-header">
-                <h1>Clinical Simulation Lab</h1>
-                <p>Practice clinical reasoning with AI-powered patient interactions and expert feedback</p>
+            <!-- Search Bar Area -->
+            <div class="search-container" style="max-width:800px; margin: 2rem auto; text-align:center;">
+                <h1 style="color:var(--text-primary); margin-bottom: 0.5rem;">Clinical Simulation Assistant</h1>
+                <p style="color:var(--text-secondary); margin-bottom: 1.5rem;">Search a topic to instantly generate a
+                    custom clinical case, or choose from our recommendations below.</p>
+
+                <form id="searchForm" onsubmit="handleSearch(event)"
+                    style="display:flex; gap:0.5rem; background:white; padding:0.5rem; border-radius:12px; box-shadow:var(--shadow-md);">
+                    <input type="text" id="topicInput" placeholder="What would you like to practice diagnosing today?"
+                        style="flex:1; border:none; padding:1rem; font-size:1rem; outline:none;" required />
+
+                    <select id="sourceSelect"
+                        style="border:1px solid #e2e8f0; border-radius:8px; padding:0 1rem; background:#f8fafc; color:var(--text-secondary); outline:none;">
+                        <option value="auto">Auto (Best Available)</option>
+                        <option value="pubmed">PubMed Case Reports</option>
+                        <option value="wiley">Wiley Open Access</option>
+                        <option value="endless_medical">EndlessMedical Diagnostic</option>
+                    </select>
+
+                    <button type="submit" class="btn-primary" id="searchBtn" style="padding:0 2rem;">Generate
+                        Case</button>
+                </form>
+
+                <div id="generatingOverlay"
+                    style="display:none; margin-top: 1.5rem; color:var(--primary); font-weight:500;">
+                    <span class="spinner" style="display:inline-block; margin-right:8px;"></span>
+                    Generating your patient. This may take 30-60 seconds...
+                </div>
             </div>
 
-            <div class="resident-row">
-                <input type="text" id="residentName" placeholder="Your name (e.g. Dr. Smith)" />
-                <button class="btn-primary btn-sm" onclick="loadCases()">Continue</button>
+            <!-- Recommended Cases Grid -->
+            <div style="max-width:1200px; margin:0 auto;">
+                <h3 style="margin-bottom:1rem; color:var(--text-secondary);">Recommended Cases</h3>
+                <div id="caseGrid" class="case-grid"></div>
             </div>
 
-            <div id="caseGrid" class="case-grid" style="display:none;"></div>
+            <input type="hidden" id="residentName" value="Resident" />
         </div>
 
         <!-- ══════════════════ SCREEN 2: SIMULATION ══════════════════ -->
@@ -1252,11 +1278,13 @@ IV heparin bolus
         }
 
         // ── Load cases ──
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCases();
+        });
+
         async function loadCases() {
             const name = document.getElementById('residentName').value.trim() || 'Resident';
-            document.getElementById('residentName').value = name;
             const grid = document.getElementById('caseGrid');
-            grid.style.display = 'grid';
             grid.innerHTML = '<p style="text-align:center;color:var(--text-secondary);">Loading recommended cases…</p>';
 
             // Phase F: Fetch bandit-optimized cases
@@ -1288,6 +1316,54 @@ IV heparin bolus
                 };
                 grid.appendChild(card);
             });
+        }
+
+        // ── Search & Generate ──
+        async function handleSearch(e) {
+            e.preventDefault();
+            const topic = document.getElementById('topicInput').value.trim();
+            const source = document.getElementById('sourceSelect').value;
+            if (!topic) return;
+
+            const btn = document.getElementById('searchBtn');
+            const overlay = document.getElementById('generatingOverlay');
+
+            btn.disabled = true;
+            btn.textContent = "Generating...";
+            overlay.style.display = "block";
+
+            try {
+                const res = await fetch('/api/cases/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic, source })
+                });
+
+                if (!res.ok) {
+                    let errStr = "Failed to generate case";
+                    try { const errData = await res.json(); errStr = errData.detail || errStr; } catch (e) { }
+                    throw new Error(errStr);
+                }
+
+                const data = await res.json();
+                const residentName = document.getElementById('residentName').value || "Resident";
+
+                // Track engagement for auto-generated items as a generic arm
+                fetch('/api/cases/track_engagement', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ arm_id: "auto_generated", success: true })
+                }).catch(e => console.error("Telemetry error", e));
+
+                await startSimulation(data.case_id, residentName);
+            } catch (err) {
+                console.error(err);
+                alert("Case generation failed: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Generate Case";
+                overlay.style.display = "none";
+            }
         }
 
         // ── Start simulation ──

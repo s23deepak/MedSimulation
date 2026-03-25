@@ -452,37 +452,75 @@ async def api_import_endless(payload: dict):
 @app.post("/api/cases/generate")
 async def api_generate_case(payload: dict):
     """
-    Generate a case from a free-text prompt.
-    Body: { "specialty": str, "difficulty": str, "description": str (optional) }
+    Generate a case from a Free-text topic, optionally using external sources.
+    Body: { "topic": str, "source": "auto"|"pubmed"|"wiley"|"endless_medical" }
     """
     from src.simulation.case_sources.ai_generator import generate_case
+    from src.simulation.case_sources.pubmed import search_pubmed_cases, fetch_pubmed_abstracts, abstract_to_case
+    from src.simulation.case_sources.wiley import search_wiley_cases, wiley_article_to_case
+    from src.simulation.case_sources.endless_medical import build_case_from_disease
 
-    specialty = payload.get("specialty", "Emergency Medicine")
-    difficulty = payload.get("difficulty", "intermediate")
-    description = payload.get("description", "")
+    topic = payload.get("topic", "").strip()
+    source = payload.get("source", "auto").lower()
 
+    if not topic:
+        raise HTTPException(status_code=400, detail="topic is required")
     if vllm_client is None:
         raise HTTPException(status_code=503, detail="vLLM not connected")
 
-    source_text = (
-        f"Generate a realistic {difficulty} clinical simulation case for {specialty}.\n"
-    )
-    if description:
-        source_text += f"Specific scenario: {description}\n"
-    source_text += (
-        "Make it clinically accurate with realistic vitals, history, exam findings, "
-        "investigations, and management steps with specific drug names and doses."
-    )
+    mode = os.getenv("VLLM_MODE", "simulated")
+    status = "approved" if mode == "local" else "pending"
 
     try:
-        case_data = await generate_case(vllm_client, source_text, source_type="ai_generated")
-        case_data["specialty"] = specialty
-        case_data["difficulty"] = difficulty
-        mode = os.getenv("VLLM_MODE", "simulated")
-        status = "approved" if mode == "local" else "pending"
-        save_case(case_data, source="ai_generated", status=status)
+        case_data = None
+        
+        # 1. EndlessMedical
+        if source == "endless_medical" or source == "auto":
+            try:
+                case_data = await build_case_from_disease(topic, vllm_client)
+            except Exception as e:
+                logger.warning("EndlessMedical failed: %s", e)
+                if source == "endless_medical":
+                    raise
+                
+        # 2. PubMed
+        if not case_data and (source == "pubmed" or source == "auto"):
+            try:
+                pmids = await search_pubmed_cases(topic, max_results=1)
+                if pmids:
+                    abstracts = await fetch_pubmed_abstracts(pmids)
+                    if abstracts:
+                        case_data = await abstract_to_case(abstracts[0], vllm_client)
+            except Exception as e:
+                logger.warning("PubMed failed: %s", e)
+                if source == "pubmed":
+                    raise
+
+        # 3. Wiley
+        if not case_data and (source == "wiley" or source == "auto"):
+            try:
+                articles = await search_wiley_cases(query=topic, max_results=1)
+                if articles:
+                    case_data = await wiley_article_to_case(articles[0], vllm_client)
+            except Exception as e:
+                logger.warning("Wiley failed: %s", e)
+                if source == "wiley":
+                    raise
+
+        # 4. Fallback to generic AI generation
+        if not case_data:
+            source_text = (
+                f"Generate a realistic clinical simulation case about {topic}.\n"
+                "Make it clinically accurate with realistic vitals, history, exam findings, "
+                "investigations, and management steps with specific drug names and doses."
+            )
+            case_data = await generate_case(vllm_client, source_text, source_type="ai_generated")
+
+        save_case(case_data, source=case_data.get("_source_type", "ai_generated"), status=status)
         return JSONResponse(content={"case_id": case_data["case_id"], "title": case_data.get("title", ""), "status": status})
+
     except Exception as e:
+        logger.error("Generation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

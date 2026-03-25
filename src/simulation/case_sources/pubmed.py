@@ -156,6 +156,13 @@ def _parse_pubmed_xml_multiple(xml_text: str) -> list[dict]:
             journal_el = article_el.find(".//Journal/Title")
             year_el = article_el.find(".//PubDate/Year")
 
+            # Extract PMCID if available
+            pmcid = ""
+            for aid in article_el.findall(".//ArticleId"):
+                if aid.get("IdType") == "pmc":
+                    pmcid = aid.text
+                    break
+
             # Abstract may have multiple sections
             abstract_parts = []
             for abs_el in article_el.findall(".//AbstractText"):
@@ -174,6 +181,7 @@ def _parse_pubmed_xml_multiple(xml_text: str) -> list[dict]:
 
             results.append({
                 "pmid": pmid_el.text if pmid_el is not None else "",
+                "pmcid": pmcid,
                 "title": title_el.text if title_el is not None else "",
                 "abstract": "\n".join(abstract_parts),
                 "mesh_terms": mesh_terms,
@@ -184,6 +192,65 @@ def _parse_pubmed_xml_multiple(xml_text: str) -> list[dict]:
         logger.error("Failed to parse PubMed XML: %s", e)
 
     return results
+
+
+# ── Image Extraction ──────────────────────────────────────────────────────────
+
+async def extract_pmc_images(pmcid: str) -> list[dict]:
+    """Scrape image URLs and captions from a PMC article HTML page."""
+    url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 MedSimulation Bot"})
+            if r.status_code != 200:
+                return []
+        except Exception as e:
+            logger.warning("Failed to fetch PMC page %s: %s", pmcid, e)
+            return []
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(r.text, "html.parser")
+    
+    images = []
+    # PMC figures are usually in div.fig
+    for fig in soup.find_all("div", class_="fig"):
+        img = fig.find("img")
+        if not img or not img.get("src"):
+            continue
+            
+        src = img["src"]
+        if src.startswith("/"):
+            src = "https://www.ncbi.nlm.nih.gov" + src
+            
+        # Get caption
+        caption_div = fig.find("div", class_="caption")
+        caption = caption_div.get_text(separator=" ", strip=True) if caption_div else "Clinical Image"
+        
+        # Determine modality from caption (heuristic)
+        mod = caption.lower()
+        if any(x in mod for x in ["x-ray", "radiograph", "cxr"]):
+            modality = "XR"
+        elif any(x in mod for x in ["ct ", "computed tomography"]):
+            modality = "CT"
+        elif any(x in mod for x in ["mri", "magnetic resonance"]):
+            modality = "MRI"
+        elif any(x in mod for x in ["ecg", "electrocardiogram"]):
+            modality = "ECG"
+        elif any(x in mod for x in ["ultrasound", "sonogram", "uss", "pocus"]):
+            modality = "US"
+        else:
+            modality = "PATH"
+            
+        images.append({
+            "study_id": f"IMG-{pmcid}-{len(images)+1}",
+            "modality": modality,
+            "description": (caption[:60] + "...") if len(caption) > 60 else caption,
+            "file_path": src,
+            "findings": caption,
+            "thumbnail": src
+        })
+        
+    return images
 
 
 # ── Full pipeline ─────────────────────────────────────────────────────────────
@@ -200,9 +267,25 @@ async def abstract_to_case(abstract: dict, vllm_client: Any) -> dict:
         f"MeSH Terms: {', '.join(abstract['mesh_terms'])}\n\n"
         f"Abstract:\n{abstract['abstract']}"
     )
-    return await generate_case(
+    
+    case_dict = await generate_case(
         vllm_client,
         source_text=source_text,
         source_type="pubmed",
         source_ref=abstract["pmid"],
     )
+    
+    # Phase G: Extract images if PMC ID is present
+    if abstract.get("pmcid"):
+        try:
+            images = await extract_pmc_images(abstract["pmcid"])
+            if images:
+                # Add to generated case
+                if "imaging_studies" not in case_dict:
+                    case_dict["imaging_studies"] = []
+                case_dict["imaging_studies"].extend(images)
+                logger.info("Extracted %d images from %s", len(images), abstract["pmcid"])
+        except Exception as e:
+            logger.warning("Error extracting images for %s: %s", abstract["pmcid"], e)
+            
+    return case_dict
