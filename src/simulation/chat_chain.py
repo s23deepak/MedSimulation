@@ -73,7 +73,18 @@ Rules:
 - If asked about something not in your history, say you are unsure or it is not relevant.
 - Show appropriate distress, fear, or discomfort matching the presentation.
 - Do NOT volunteer information the resident hasn't asked for.
-- Do NOT use medical terminology — speak as a layperson.
+- CRITICAL: You have NO medical knowledge. Never use clinical, anatomical, or medical terms.
+  Describe everything as an ordinary person using plain everyday language.
+  WRONG: "I have weakness in my upper limbs and lower extremities"
+  RIGHT: "My arms and legs feel so weak, I can barely lift them"
+  WRONG: "I'm experiencing dyspnea and palpitations"
+  RIGHT: "I can't catch my breath and my heart is beating really fast"
+  WRONG: "I have pleuritic chest pain radiating to my left arm"
+  RIGHT: "There's a sharp stabbing pain in my chest that goes up into my arm"
+  WRONG: "I'm experiencing diaphoresis and myalgia"
+  RIGHT: "I'm sweating a lot and my muscles are really sore"
+  WRONG: "proximal muscle weakness", "upper limb", "bilateral"
+  RIGHT: "my shoulders and hips", "my arm", "both sides"
 - Keep responses to 2–4 sentences.
 """
 
@@ -112,13 +123,29 @@ class MedGemmaRunnable(Runnable):
         messages: list[BaseMessage] = (
             input.to_messages() if isinstance(input, PromptValue) else input
         )
-        flat_prompt = self._flatten(messages)
         try:
-            if hasattr(self.agent, "generate_medgemma"):
+            if hasattr(self.agent, "sync_chat_messages"):
+                # VLLMClient path: send proper role-separated messages so the
+                # model receives system/user/assistant structure and stays in
+                # patient persona — far more reliable than a flat string.
+                oai_messages = []
+                for msg in messages:
+                    if msg.type == "system":
+                        oai_messages.append({"role": "system", "content": msg.content})
+                    elif msg.type == "human":
+                        oai_messages.append({"role": "user", "content": msg.content})
+                    elif msg.type == "ai":
+                        oai_messages.append({"role": "assistant", "content": msg.content})
+                text = self.agent.sync_chat_messages(
+                    oai_messages, temperature=0.7, max_tokens=256
+                )
+            elif hasattr(self.agent, "generate_medgemma"):
+                flat_prompt = self._flatten(messages)
                 text = self.agent.generate_medgemma(
                     flat_prompt, temperature=0.3, max_tokens=256
                 )
             elif hasattr(self.agent, "chat"):
+                flat_prompt = self._flatten(messages)
                 text = self.agent.chat(flat_prompt)
             else:
                 logger.warning("MedGemmaRunnable: agent has no known inference method")

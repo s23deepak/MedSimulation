@@ -30,7 +30,9 @@ echo "╚═══════════════════════�
 
 exec vllm serve "${MODEL}" \
     --port "${PORT}" \
-    --dtype float16 \
+    --dtype bfloat16 \
+    --quantization bitsandbytes \
+    --load-format bitsandbytes \
     --max-model-len "${MAX_MODEL_LEN}" \
     --gpu-memory-utilization "${GPU_UTIL}" \
     --trust-remote-code \

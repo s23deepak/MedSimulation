@@ -36,13 +36,18 @@ Imaging viewed: {imaging}
 Diagnosis submitted: {diagnosis_submitted}
 Management plan submitted: {management_submitted}
 
+CHRONOLOGICAL ACTION SEQUENCE (important for assessing clinical reasoning order):
+{action_sequence}
+
 Score each domain on the given maximum points and provide specific feedback:
 
 1. HISTORY TAKING (max {w_history} pts): Did the resident ask the key discriminating questions?
-2. PHYSICAL EXAMINATION (max {w_exam} pts): Did they examine the relevant systems?
+2. PHYSICAL EXAMINATION (max {w_exam} pts): Did they examine the relevant systems? Was exam performed AFTER adequate history taking?
 3. INVESTIGATIONS (max {w_inv} pts): Were the key investigations ordered? Any unnecessary ones?
 4. DIAGNOSIS (max {w_diag} pts): Is the diagnosis correct or partially correct?
 5. MANAGEMENT (max {w_mgmt} pts): Are the management steps appropriate and complete?
+
+Note: Penalise if physical examination was performed before the patient had a chance to explain their symptoms (fewer than 3 history questions asked first). Good clinical practice requires history before examination.
 
 Also provide:
 - OVERALL FEEDBACK: 2-3 sentences of constructive summary
@@ -117,6 +122,10 @@ def score_session(session: Any, agent: Any = None) -> ScoreResult:
 def _ai_score(session: Any, agent: Any) -> ScoreResult:
     case = session.case
     w = case.score_weights
+    action_log = getattr(session, "action_log", [])
+    action_sequence = "\n".join(
+        f"[{e['ts'][11:19]}] {e['type'].upper()}: {e['detail']}" for e in action_log
+    ) or "No actions recorded."
     prompt = TUTOR_SCORING_PROMPT.format(
         case_title=case.title,
         correct_diagnosis=case.correct_diagnosis,
@@ -131,6 +140,7 @@ def _ai_score(session: Any, agent: Any) -> ScoreResult:
         management_submitted="\n".join(
             f"- {m}" for m in session.management_submitted
         ) or "Not submitted",
+        action_sequence=action_sequence,
         w_history=w["history"],
         w_exam=w["exam"],
         w_inv=w["investigations"],
@@ -193,9 +203,24 @@ def _rule_based_score(session: Any) -> ScoreResult:
     scores["exam"] = round(
         min(w["exam"], (exam_hits / max(len(key_systems), 1)) * w["exam"])
     )
-    feedback["exam"] = (
-        f"Examined {len(session.exam_systems_viewed)}/{len(key_systems)} relevant systems."
-    )
+    exam_feedback = f"Examined {len(session.exam_systems_viewed)}/{len(key_systems)} relevant systems."
+
+    # Check ordering: how many history questions before first physical exam?
+    action_log = getattr(session, "action_log", [])
+    if session.exam_systems_viewed and action_log:
+        history_before_exam = 0
+        for entry in action_log:
+            if entry["type"] == "history":
+                history_before_exam += 1
+            elif entry["type"] == "exam":
+                break
+        if history_before_exam < 3:
+            exam_feedback += (
+                f" Warning: Physical exam performed after only {history_before_exam} "
+                "history question(s) — adequate history should precede examination."
+            )
+            scores["exam"] = round(scores["exam"] * 0.7)
+    feedback["exam"] = exam_feedback
 
     # Investigations (& Imaging)
     key_invs = list(case.investigations.keys())[:6]

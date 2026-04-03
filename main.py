@@ -210,6 +210,7 @@ async def api_sim_history(payload: dict):
         
         # Phase E: Generate Audio if we have an OpenAI API Key
         import os
+        from src.simulation.media import generate_patient_voice
         openai_key = os.getenv("OPENAI_API_KEY")
         if result.get("ai") and openai_key:
             session = simulation_engine.get_session(session_id)
@@ -516,7 +517,7 @@ async def api_generate_case(payload: dict):
             )
             case_data = await generate_case(vllm_client, source_text, source_type="ai_generated")
 
-        save_case(case_data, source=case_data.get("_source_type", "ai_generated"), status=status)
+        save_case(case_data, source=case_data.get("_source_type", "ai_generated"), source_ref=case_data.get("_source_ref", ""), status=status)
         return JSONResponse(content={"case_id": case_data["case_id"], "title": case_data.get("title", ""), "status": status})
 
     except Exception as e:

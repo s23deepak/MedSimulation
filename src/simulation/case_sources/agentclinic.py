@@ -371,7 +371,9 @@ def _normalize_vitals(vitals_raw: dict) -> dict:
     result.setdefault("HR", "Not recorded")
     result.setdefault("BP", "Not recorded")
     result.setdefault("RR", "Not recorded")
+    result.setdefault("SpO2", "Not recorded")
     result.setdefault("Temp", "Not recorded")
+    result.setdefault("GCS", "Not recorded")
     return result
 
 

@@ -363,7 +363,10 @@ def resolve_image_path(file_path: str) -> Path | None:
 
 
 def get_image_url(file_path: str) -> str:
-    """Convert a relative file path to a URL for the frontend."""
+    """Convert a relative file path to a URL for the frontend.
+    External URLs (http/https) are returned unchanged."""
+    if file_path.startswith(("http://", "https://")):
+        return file_path
     return f"/imaging/{file_path}"
 
 

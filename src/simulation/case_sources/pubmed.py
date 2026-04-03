@@ -57,9 +57,11 @@ async def search_pubmed_cases(
     list[str]
         List of PubMed IDs (PMIDs).
     """
+    # Search with MeSH AND title/abstract so non-standard terms still hit
+    term = f"case reports[pt] AND ({specialty}[mesh] OR {specialty}[tiab]) AND {years}[dp]"
     params = {
         "db": "pubmed",
-        "term": f"case reports[pt] AND {specialty}[mesh] AND {years}[dp]",
+        "term": term,
         "retmax": min(max_results, 100),
         "retmode": "json",
     }
@@ -260,12 +262,13 @@ async def abstract_to_case(abstract: dict, vllm_client: Any) -> dict:
     Transform a PubMed abstract into a structured ClinicalCase dict
     using the AI case generator.
     """
+    abstract_text = abstract['abstract'][:1500]  # cap to stay within 4096 token context
     source_text = (
         f"Published Case Report (PMID: {abstract['pmid']})\n"
         f"Title: {abstract['title']}\n"
         f"Journal: {abstract['journal']} ({abstract['year']})\n"
         f"MeSH Terms: {', '.join(abstract['mesh_terms'])}\n\n"
-        f"Abstract:\n{abstract['abstract']}"
+        f"Abstract:\n{abstract_text}"
     )
     
     case_dict = await generate_case(

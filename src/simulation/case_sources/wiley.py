@@ -145,6 +145,22 @@ async def fetch_wiley_fulltext(doi: str) -> str | None:
 
 # ── Image Extraction ──────────────────────────────────────────────────────────
 
+async def _doi_to_pmcid(doi: str) -> str | None:
+    """Look up a PMCID for a DOI using the PubMed ID Converter API."""
+    url = f"https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={doi}&idtype=doi&format=json"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(url, headers={"User-Agent": "MedSimulation/1.0"})
+            if r.status_code == 200:
+                data = r.json()
+                for record in data.get("records", []):
+                    pmcid = record.get("pmcid")
+                    if pmcid:
+                        return pmcid
+    except Exception as e:
+        logger.debug("DOI→PMCID lookup failed for %s: %s", doi, e)
+    return None
+
 async def extract_wiley_images(url: str) -> list[dict]:
     """Scrape image URLs and captions from a Wiley Open Access HTML page."""
     if not url or "onlinelibrary.wiley.com" not in url:
@@ -220,7 +236,7 @@ async def wiley_article_to_case(article: dict, vllm_client: Any) -> dict:
     full_text = await fetch_wiley_fulltext(article["doi"])
 
     if full_text:
-        content = full_text[:4000]  # Trim to fit context
+        content = full_text[:1500]  # Trim to fit 4096 token context window
         content_label = "Full Text (truncated)"
     else:
         content = article.get("abstract", "")
@@ -245,17 +261,31 @@ async def wiley_article_to_case(article: dict, vllm_client: Any) -> dict:
         source_ref=article["doi"],
     )
     
-    # Phase G: Extract images if public URL is available
+    # Phase G: Extract images — try Wiley HTML first, fall back to PMC
+    images = []
     if article.get("url"):
         try:
             images = await extract_wiley_images(article["url"])
             if images:
-                if "imaging_studies" not in case_dict:
-                    case_dict["imaging_studies"] = []
-                case_dict["imaging_studies"].extend(images)
-                logger.info("Extracted %d images from %s", len(images), article["url"])
+                logger.info("Extracted %d images from Wiley HTML (%s)", len(images), article["url"])
         except Exception as e:
-            logger.warning("Error extracting images for %s: %s", article["url"], e)
+            logger.warning("Wiley image extraction failed (%s): %s", article["url"], e)
+
+    if not images:
+        # Wiley HTML blocked or empty — look up PMCID and use PMC extractor
+        try:
+            from src.simulation.case_sources.pubmed import extract_pmc_images
+            pmcid = await _doi_to_pmcid(article["doi"])
+            if pmcid:
+                images = await extract_pmc_images(pmcid)
+                if images:
+                    logger.info("Extracted %d images from PMC fallback (%s)", len(images), pmcid)
+        except Exception as e:
+            logger.warning("PMC image fallback failed for DOI %s: %s", article["doi"], e)
+
+    if images:
+        case_dict.setdefault("imaging_studies", [])
+        case_dict["imaging_studies"].extend(images)
             
     return case_dict
 

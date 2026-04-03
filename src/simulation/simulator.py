@@ -43,6 +43,9 @@ class SimulationSession:
     investigations_ordered: list[str] = field(default_factory=list)
     imaging_studies_viewed: list[str] = field(default_factory=list)  # study_ids
 
+    # Chronological action log — tracks doctor actions in order for feedback
+    action_log: list[dict] = field(default_factory=list)  # [{type, detail, ts}]
+
     # Submissions
     diagnosis_submitted: str = ""
     management_submitted: list[str] = field(default_factory=list)
@@ -77,7 +80,7 @@ class SimulationSession:
                     "study_id": s["study_id"],
                     "modality": s["modality"],
                     "description": s["description"],
-                    "image_url": get_image_url(s["file_path"]),
+                    "image_url": get_image_url(s["file_path"]) if s.get("file_path") else "",
                     "thumbnail": get_image_url(s["thumbnail"]) if s.get("thumbnail") else "",
                 }
                 for s in (self.case.imaging_studies or [])
@@ -90,6 +93,9 @@ class SimulationSession:
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "turn_count": len(self.history_questions),
+            "action_log": self.action_log,
+            "source": getattr(self.case, "source", ""),
+            "source_ref": getattr(self.case, "source_ref", ""),
         }
 
 
@@ -167,6 +173,7 @@ class SimulationEngine:
             "ts": datetime.now().isoformat(),
         }
         session.history_questions.append(entry)
+        session.action_log.append({"type": "history", "detail": question, "ts": entry["ts"]})
         return entry
 
     def view_exam(self, session_id: str, system: str) -> dict:
@@ -183,6 +190,8 @@ class SimulationEngine:
             if system_key not in session.exam_systems_viewed:
                 session.exam_systems_viewed.append(system_key)
 
+        ts = datetime.now().isoformat()
+        session.action_log.append({"type": "exam", "detail": system_key or system, "ts": ts})
         return {"system": system_key or system, "findings": findings}
 
     def order_investigation(self, session_id: str, investigation: str) -> dict:
@@ -201,6 +210,8 @@ class SimulationEngine:
             if key not in session.investigations_ordered:
                 session.investigations_ordered.append(key)
 
+        ts = datetime.now().isoformat()
+        session.action_log.append({"type": "investigation", "detail": key, "ts": ts})
         return {"investigation": key, "result": result}
 
     def view_imaging(self, session_id: str, study_id: str) -> dict:
@@ -219,11 +230,13 @@ class SimulationEngine:
         if study_id not in session.imaging_studies_viewed:
             session.imaging_studies_viewed.append(study_id)
 
+        ts = datetime.now().isoformat()
+        session.action_log.append({"type": "imaging", "detail": study_id, "ts": ts})
         return {
             "study_id": study["study_id"],
             "modality": study["modality"],
             "description": study["description"],
-            "image_url": get_image_url(study["file_path"]),
+            "image_url": get_image_url(study["file_path"]) if study.get("file_path") else "",
             "findings": study["findings"],
         }
 
@@ -241,6 +254,7 @@ class SimulationEngine:
         session.diagnosis_submitted = diagnosis
         session.management_submitted = management
         session.status = "submitted"
+        session.action_log.append({"type": "assessment", "detail": diagnosis, "ts": datetime.now().isoformat()})
 
         # Score
         score_result = score_session(session, agent=self.agent)
@@ -277,6 +291,8 @@ class SimulationEngine:
     def _clean_response(text: str) -> str:
         """Strip MedGemma internal thinking/planning preamble from responses."""
         text = re.sub(r"^<unused\d+>\s*", "", text.strip())
+        # Strip role prefixes the model sometimes echoes ("Patient: ", "Resident: ")
+        text = re.sub(r"^(patient|resident|doctor)\s*:\s*", "", text, flags=re.IGNORECASE)
 
         if "\n\n" not in text:
             if text.lower().startswith("thought"):

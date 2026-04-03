@@ -153,6 +153,9 @@ def save_case(
 
     # If approved, also register in the in-memory case registry
     if status == "approved":
+        # Inject provenance so ClinicalCase.source/source_ref are populated
+        case_data["source"] = source
+        case_data["source_ref"] = source_ref
         _register_case_from_dict(case_data)
 
     return case_id
@@ -173,6 +176,9 @@ def load_dynamic_cases(status: str = "approved") -> list[dict]:
         data["_source"] = row["source"]
         data["_source_ref"] = row["source_ref"]
         data["_status"] = row["status"]
+        # Also set without underscore so ClinicalCase.source/source_ref fields are populated
+        data["source"] = row["source"]
+        data["source_ref"] = row["source_ref"]
         cases.append(data)
 
     return cases
@@ -196,10 +202,13 @@ def approve_case(case_id: str) -> bool:
 
         # Load into memory
         row = conn.execute(
-            "SELECT case_data FROM cases WHERE case_id = ?", (case_id,)
+            "SELECT case_data, source, source_ref FROM cases WHERE case_id = ?", (case_id,)
         ).fetchone()
         if row:
-            _register_case_from_dict(json.loads(row["case_data"]))
+            data = json.loads(row["case_data"])
+            data["source"] = row["source"]
+            data["source_ref"] = row["source_ref"]
+            _register_case_from_dict(data)
 
     logger.info("Approved case %s", case_id)
     return True

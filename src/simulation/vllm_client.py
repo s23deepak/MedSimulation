@@ -47,7 +47,7 @@ class VLLMClient:
         base_url: str,
         api_key: str = "EMPTY",
         model: str = _DEFAULT_LOCAL_MODEL,
-        timeout: float = 60.0,
+        timeout: float = 30.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -149,6 +149,35 @@ class VLLMClient:
             return False
 
     # ── Sync interface (for LangChain Runnable.invoke) ────────────────────────
+
+    def sync_chat_messages(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 512,
+    ) -> str:
+        """
+        Synchronous, role-preserving chat — passes system/user/assistant messages
+        directly to the OpenAI-compatible API instead of flattening to one string.
+        Preferred by MedGemmaRunnable for patient-persona turns.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(
+                    asyncio.run,
+                    self.chat_async(messages, temperature=temperature, max_tokens=max_tokens),
+                )
+                return future.result(timeout=self.timeout)
+        else:
+            return asyncio.run(
+                self.chat_async(messages, temperature=temperature, max_tokens=max_tokens)
+            )
 
     def chat(self, prompt: str) -> str:
         """

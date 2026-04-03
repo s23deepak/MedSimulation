@@ -79,6 +79,10 @@ class ClinicalCase:
     imaging_studies: list[dict] = field(default_factory=list)
     patient_image_url: str = ""
 
+    # Provenance (AI-generated cases only)
+    source: str = ""        # 'pubmed' | 'wiley' | 'endless_medical' | 'ai_generated' | 'static'
+    source_ref: str = ""    # PMID, DOI, or empty
+
 
 # ── Case registry ─────────────────────────────────────────────────────────────
 
