@@ -200,59 +200,98 @@ def _parse_pubmed_xml_multiple(xml_text: str) -> list[dict]:
 
 async def extract_pmc_images(pmcid: str) -> list[dict]:
     """Scrape image URLs and captions from a PMC article HTML page."""
-    url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/"
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 MedSimulation Bot"})
-            if r.status_code != 200:
-                return []
-        except Exception as e:
-            logger.warning("Failed to fetch PMC page %s: %s", pmcid, e)
-            return []
+    headers = {"User-Agent": "Mozilla/5.0 MedSimulation/1.0 (medical education)"}
+    html = None
+
+    # PMC moved to pmc.ncbi.nlm.nih.gov; try both with redirect following
+    for url in [
+        f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid}/",
+        f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/",
+    ]:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            try:
+                r = await client.get(url, headers=headers)
+                if r.status_code == 200:
+                    html = r.text
+                    break
+            except Exception as e:
+                logger.warning("PMC fetch failed for %s at %s: %s", pmcid, url, e)
+
+    if not html:
+        return []
 
     from bs4 import BeautifulSoup
-    soup = BeautifulSoup(r.text, "html.parser")
-    
+    soup = BeautifulSoup(html, "html.parser")
+
     images = []
-    # PMC figures are usually in div.fig
-    for fig in soup.find_all("div", class_="fig"):
+
+    # ── Strategy 1: semantic <figure> tags (new PMC site) ────────────────
+    for fig in soup.find_all("figure"):
         img = fig.find("img")
-        if not img or not img.get("src"):
+        if not img:
             continue
-            
-        src = img["src"]
+        src = img.get("src", "") or img.get("data-src", "")
+        if not src:
+            continue
         if src.startswith("/"):
-            src = "https://www.ncbi.nlm.nih.gov" + src
-            
-        # Get caption
-        caption_div = fig.find("div", class_="caption")
-        caption = caption_div.get_text(separator=" ", strip=True) if caption_div else "Clinical Image"
-        
-        # Determine modality from caption (heuristic)
-        mod = caption.lower()
-        if any(x in mod for x in ["x-ray", "radiograph", "cxr"]):
-            modality = "XR"
-        elif any(x in mod for x in ["ct ", "computed tomography"]):
-            modality = "CT"
-        elif any(x in mod for x in ["mri", "magnetic resonance"]):
-            modality = "MRI"
-        elif any(x in mod for x in ["ecg", "electrocardiogram"]):
-            modality = "ECG"
-        elif any(x in mod for x in ["ultrasound", "sonogram", "uss", "pocus"]):
-            modality = "US"
-        else:
-            modality = "PATH"
-            
-        images.append({
-            "study_id": f"IMG-{pmcid}-{len(images)+1}",
-            "modality": modality,
-            "description": (caption[:60] + "...") if len(caption) > 60 else caption,
-            "file_path": src,
-            "findings": caption,
-            "thumbnail": src
-        })
-        
+            src = "https://pmc.ncbi.nlm.nih.gov" + src
+        caption_el = fig.find("figcaption")
+        caption = caption_el.get_text(separator=" ", strip=True) if caption_el else img.get("alt", "Clinical image")
+        images.append(_make_image_entry(pmcid, src, caption, len(images)))
+
+    # ── Strategy 2: div.fig (old PMC markup) ─────────────────────────────
+    if not images:
+        for fig in soup.find_all("div", class_="fig"):
+            img = fig.find("img")
+            if not img:
+                continue
+            src = img.get("src", "")
+            if not src:
+                continue
+            if src.startswith("/"):
+                src = "https://www.ncbi.nlm.nih.gov" + src
+            caption_div = fig.find("div", class_="caption")
+            caption = caption_div.get_text(separator=" ", strip=True) if caption_div else "Clinical image"
+            images.append(_make_image_entry(pmcid, src, caption, len(images)))
+
+    # ── Strategy 3: any img pointing to PMC CDN ──────────────────────────
+    if not images:
+        for img in soup.find_all("img"):
+            src = img.get("src", "") or img.get("data-src", "")
+            if "cdn.ncbi.nlm.nih.gov/pmc/" not in src and "/pmc/blobs/" not in src:
+                continue
+            caption = img.get("alt", "Clinical image")
+            images.append(_make_image_entry(pmcid, src, caption, len(images)))
+
+    logger.info("Extracted %d images from PMC %s", len(images), pmcid)
     return images
+
+
+def _make_image_entry(pmcid: str, src: str, caption: str, idx: int) -> dict:
+    """Build an imaging_study dict from a scraped PMC figure."""
+    mod = caption.lower()
+    if any(x in mod for x in ["x-ray", "radiograph", "cxr", "plain film"]):
+        modality = "XR"
+    elif any(x in mod for x in ["ct ", "computed tomography", "fluoroscop"]):
+        modality = "CT"
+    elif any(x in mod for x in ["mri", "magnetic resonance"]):
+        modality = "MRI"
+    elif any(x in mod for x in ["ecg", "electrocardiogram", "ekg"]):
+        modality = "ECG"
+    elif any(x in mod for x in ["ultrasound", "sonogram", "uss", "pocus"]):
+        modality = "US"
+    else:
+        modality = "PATH"
+
+    short_desc = (caption[:80] + "…") if len(caption) > 80 else caption
+    return {
+        "study_id": f"IMG-{pmcid}-{idx + 1}",
+        "modality": modality,
+        "description": short_desc,
+        "file_path": src,
+        "findings": caption,
+        "thumbnail": src,
+    }
 
 
 # ── Full pipeline ─────────────────────────────────────────────────────────────

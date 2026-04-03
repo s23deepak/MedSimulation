@@ -184,5 +184,9 @@ MedSimulation/
 - Native EHR (Electronic Health Record) dashboard UI skinning.
 - Audio transcriptions (whisper) for hands-free simulation.
 
+## 🗒️ Known Limitations / TODO
+- **Context sliding for patient conversation**: medgemma-4b-it has a 4096-token context window. Long simulations (>25 exchanges) will eventually hit the limit. Implement a sliding-window trim in `chat_chain.py` — keep system prompt + last N turn pairs, dropping older history at inference time while preserving it in memory for scoring/debrief.
+- **vLLM context length**: Default `VLLM_MAX_MODEL_LEN=4096`. For better case generation quality, restart with `VLLM_MAX_MODEL_LEN=8192 bash scripts/start_vllm.sh`.
+
 ## License
 MIT License
