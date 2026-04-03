@@ -201,6 +201,29 @@ MedSimulation/
 ### Infrastructure (Context Window)
 - **Context sliding for patient conversation**: medgemma-4b-it has a 4096-token context window. Long simulations (>25 exchanges) will eventually hit the limit. Implement a sliding-window trim in `chat_chain.py` — keep system prompt + last N turn pairs, dropping older history at inference time while preserving it in memory for scoring/debrief.
 - **vLLM context length**: Default `VLLM_MAX_MODEL_LEN=4096`. For better case generation quality, restart with `VLLM_MAX_MODEL_LEN=8192 bash scripts/start_vllm.sh`.
+- **Session Checkpoint Agent**: Background agent that periodically persists in-progress sessions to SQLite. `save_session()` already exists in `database.py` but is never called — a server restart currently drops all active sessions.
+
+## 🤖 TODO - Agentic Workflow
+
+### High Impact
+
+- **Clinical Reasoning Agent**: Mid-simulation agent that monitors the action log in real-time, detects missed critical tests, prompts the resident with Socratic questions (e.g. *"You've ordered an ECG — what are you ruling out?"*), and maintains a running differential updated after each action. Tools: `get_session_state`, `update_differential`, `flag_critical_miss`.
+
+- **Case Quality Verification Agent**: Post-generation agent loop that validates clinical plausibility (drug doses, lab values, vital signs), cross-references the diagnosis against the investigations provided, and retries generation with corrected prompts if quality checks fail. Fixes the biggest current gap — AI-generated cases have no validation pass.
+
+- **Personalized Curriculum Agent**: Per-resident agent that tracks performance across sessions, builds a weakness profile (e.g. consistently misses sepsis workup), and generates targeted cases for weak domains. Tools: `read_session_history`, `update_resident_profile`, `recommend_next_case`. Requires session persistence to be enabled first.
+
+### Medium Impact
+
+- **Socratic Debrief Agent**: Replaces the one-shot debrief text with a conversational agent that asks follow-up questions about the resident's reasoning, waits for their explanation, and iterates through missed reasoning steps via dialogue — closer to real clinical teaching.
+
+- **Differential Diagnosis Agent**: Runs alongside the resident throughout the simulation, maintaining a Bayesian-style differential updated after each history question and investigation. At submission, compares the resident's diagnosis to the agent's top differential and highlights where reasoning diverged. Tools: `update_differential`, `compute_pretest_probability`, `compare_to_resident`.
+
+- **EndlessMedical Iterative Feature Agent**: Replaces the current zero-feature API call (which returns useless generic priors) with an agent that extracts relevant clinical features from the case topic, iteratively calls `AddEvidence` to narrow the differential, and feeds the refined differential back into case generation for a more realistic presentation.
+
+### Lower Lift
+
+- **Multi-Agent Scoring Panel**: Runs 3 specialist agents in parallel instead of a single senior clinician call — a Clinician agent (medical accuracy), a Teacher agent (reasoning order: history before exam before diagnosis), and a Patient Safety agent (flags dangerous omissions such as missed sepsis workup or delayed imaging). Scores are aggregated for the final result.
 
 ## License
 MIT License
