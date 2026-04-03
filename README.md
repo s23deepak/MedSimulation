@@ -185,6 +185,20 @@ MedSimulation/
 - Audio transcriptions (whisper) for hands-free simulation.
 
 ## 🗒️ Known Limitations / TODO
+
+### UX & Clinical Realism
+- **Lab/Imaging results for newly ordered tests**: When a resident orders a test not pre-loaded in the case (e.g. selecting a CBC mid-simulation), the UI currently returns "no result available." The system should dynamically generate plausible, case-consistent results for any ordered test rather than surfacing a dead-end.
+- **Speech-to-text input for doctors**: Typing is not natural for clinicians during a simulated encounter. Integrate Whisper (local) or OpenAI Whisper API so residents can speak their questions/orders and have them transcribed into the input field. This is especially important for hands-free workflow and realism.
+- **Text-to-speech for patient responses**: Displaying the patient's reply as readable text lets residents re-read it indefinitely, which is unrealistic. Convert patient dialogue to audio (OpenAI TTS-1 or equivalent) so the resident must listen attentively — mirroring a real clinical encounter. Text display should be suppressed or delayed.
+
+### Scoring & Quality Metrics
+- **Patient satisfaction score**: Track and penalise repetitive or unnecessary questions during history taking. Frequent redundant queries lower the simulated patient's satisfaction score — surfaced in the debrief as a proxy for bedside manner and efficiency. This score directly affects the hospital's simulated quality metrics.
+- **Hospital-specific satisfaction metrics**: At scale, different institutions have different quality frameworks (e.g. HCAHPS, CQC, internal KPIs). The scoring engine should support per-hospital configuration that maps satisfaction dimensions to institution-specific weights. Store these profiles in the database so results are comparable within, not just across, institutions.
+
+### Documentation & Review
+- **Full session transcript export**: Every simulation session (history taking dialogue, exam choices, ordered investigations, differential, management plan, AI scores, and debrief) should be exportable as a structured document (PDF or structured JSON). This enables review by supervising consultants or subject-matter experts without having to replay the simulation.
+
+### Infrastructure (Context Window)
 - **Context sliding for patient conversation**: medgemma-4b-it has a 4096-token context window. Long simulations (>25 exchanges) will eventually hit the limit. Implement a sliding-window trim in `chat_chain.py` — keep system prompt + last N turn pairs, dropping older history at inference time while preserving it in memory for scoring/debrief.
 - **vLLM context length**: Default `VLLM_MAX_MODEL_LEN=4096`. For better case generation quality, restart with `VLLM_MAX_MODEL_LEN=8192 bash scripts/start_vllm.sh`.
 
