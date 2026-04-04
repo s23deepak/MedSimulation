@@ -12,7 +12,7 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -323,6 +323,42 @@ async def api_sim_debrief(session_id: str):
         "scores": session.score,
         "debrief": session.debrief,
     })
+
+
+@app.get("/api/simulation/session/{session_id}/export/json")
+async def api_export_json(session_id: str):
+    """Export full session transcript as a structured JSON file."""
+    session = simulation_engine.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "scored":
+        raise HTTPException(status_code=400, detail="Session not yet scored — submit assessment first")
+    from src.simulation.exporter import build_export_dict
+    import json
+    data = build_export_dict(session)
+    return Response(
+        content=json.dumps(data, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="session_{session_id}.json"'},
+    )
+
+
+@app.get("/api/simulation/session/{session_id}/export/pdf")
+async def api_export_pdf(session_id: str):
+    """Export full session transcript as a PDF file."""
+    session = simulation_engine.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != "scored":
+        raise HTTPException(status_code=400, detail="Session not yet scored — submit assessment first")
+    from src.simulation.exporter import build_export_dict, generate_pdf
+    data = build_export_dict(session)
+    pdf_bytes = generate_pdf(data)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="session_{session_id}.pdf"'},
+    )
 
 
 @app.get("/api/health")

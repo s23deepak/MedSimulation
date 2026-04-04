@@ -37,6 +37,11 @@ Never run out of cases to practice. MedSimulation features a robust ingestion pi
   - Native Window Width & Window Center adjustment by dragging to reveal hidden soft tissue vs. bone pathology on Hounsfield unit-configured screens.
   - Direct revelation of the "ground truth" radiologic interpretation overlay mapped to the image.
 
+### 📄 Session Export
+- **PDF Transcript**: One-click export of the full session as a formatted PDF — case overview, history Q&A, physical exam findings, investigation results, diagnosis, management plan, domain score table, and AI debrief narrative.
+- **JSON Export**: Machine-readable structured JSON download of the complete session for external review tools, LMS integration, or supervisor audit.
+- **Download Buttons**: Available directly in the results screen after every completed simulation.
+
 ---
 
 ## 🏗️ Architecture & API Flow
@@ -100,6 +105,7 @@ sequenceDiagram
 - `vLLM` + `OpenAI` client
 - `SQLite3` (native)
 - `pydicom` for radiology volumes
+- `fpdf2` for server-side PDF generation
 
 **Frontend**:
 - Vanilla HTML, CSS, JavaScript (No heavy framework, instant loading)
@@ -164,6 +170,7 @@ MedSimulation/
 │   ├── chat_chain.py           # Persona dialogue engine
 │   ├── database.py             # SQLite ORM wrapper
 │   ├── debrief.py              # Narrative feedback extraction
+│   ├── exporter.py             # PDF & JSON session transcript export
 │   ├── imaging.py              # ECG generation & serving logic
 │   ├── scorer.py               # AI & Rule-based assessment matrices
 │   ├── simulator.py            # Simulation state lifecycle logic
@@ -196,7 +203,7 @@ MedSimulation/
 - **Hospital-specific satisfaction metrics**: At scale, different institutions have different quality frameworks (e.g. HCAHPS, CQC, internal KPIs). The scoring engine should support per-hospital configuration that maps satisfaction dimensions to institution-specific weights. Store these profiles in the database so results are comparable within, not just across, institutions.
 
 ### Documentation & Review
-- **Full session transcript export**: Every simulation session (history taking dialogue, exam choices, ordered investigations, differential, management plan, AI scores, and debrief) should be exportable as a structured document (PDF or structured JSON). This enables review by supervising consultants or subject-matter experts without having to replay the simulation.
+- ~~**Full session transcript export**~~: Implemented — every completed session is exportable as a structured PDF (multi-section with score table and debrief narrative) or JSON via `GET /api/simulation/session/{session_id}/export/{pdf|json}`. Download buttons are available in the results screen.
 
 ### Infrastructure (Context Window)
 - **Context sliding for patient conversation**: medgemma-4b-it has a 4096-token context window. Long simulations (>25 exchanges) will eventually hit the limit. Implement a sliding-window trim in `chat_chain.py` — keep system prompt + last N turn pairs, dropping older history at inference time while preserving it in memory for scoring/debrief.

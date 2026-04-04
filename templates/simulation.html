@@ -268,7 +268,11 @@ IV heparin bolus
         <div id="screen-results" class="screen">
             <div class="sim-topbar">
                 <h2 id="resultsTitle">Case Debrief</h2>
-                <button class="btn-outline" onclick="goToLanding()">Try Another Case</button>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-outline" onclick="exportSession('pdf')">Export PDF</button>
+                    <button class="btn-outline" onclick="exportSession('json')">Export JSON</button>
+                    <button class="btn-outline" onclick="goToLanding()">Try Another Case</button>
+                </div>
             </div>
 
             <div class="score-hero">
@@ -358,6 +362,14 @@ IV heparin bolus
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function exportSession(format) {
+            if (!currentSession) return;
+            const a = document.createElement('a');
+            a.href = `/api/simulation/session/${currentSession.session_id}/export/${format}`;
+            a.download = `session_${currentSession.session_id}.${format}`;
+            a.click();
         }
 
         function goToLanding() {
@@ -1057,7 +1069,9 @@ IV heparin bolus
                 if (lines.some(l => l.trim().startsWith('- '))) {
                     html = lines.map(l => l.trim().startsWith('- ')
                         ? `<div class="ai-feedback-indent">${l.trim()}</div>` : l
-                    ).join('\n');
+                    ).join('<br>');
+                } else {
+                    html = lines.join('<br>');
                 }
                 return `<p>${html}</p>`;
             }).join('');
