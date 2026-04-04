@@ -225,43 +225,41 @@ async def extract_pmc_images(pmcid: str) -> list[dict]:
 
     images = []
 
-    # ── Strategy 1: semantic <figure> tags (new PMC site) ────────────────
-    for fig in soup.find_all("figure"):
-        img = fig.find("img")
-        if not img:
-            continue
+    # Clinical figures on PMC always come from the PMC CDN blob path.
+    # Use this as a whitelist — scan every <img> on the page and accept only
+    # images whose URL matches a known clinical-image CDN pattern.
+    # This avoids false-positives from UI icons that happen to sit inside
+    # <figure> tags on the new PMC site design.
+    CLINICAL_CDN = ("cdn.ncbi.nlm.nih.gov/pmc/blobs/", "/pmc/articles/")
+
+    for img in soup.find_all("img"):
         src = img.get("src", "") or img.get("data-src", "")
-        if not src:
+        if not any(pat in src for pat in CLINICAL_CDN):
             continue
+
+        # Resolve relative URLs
         if src.startswith("/"):
-            src = "https://pmc.ncbi.nlm.nih.gov" + src
-        caption_el = fig.find("figcaption")
-        caption = caption_el.get_text(separator=" ", strip=True) if caption_el else img.get("alt", "Clinical image")
+            src = "https://www.ncbi.nlm.nih.gov" + src
+
+        # Walk up the DOM to find the nearest caption
+        caption = img.get("alt", "")
+        for ancestor in img.parents:
+            # <figure> with <figcaption>
+            fc = ancestor.find("figcaption") if hasattr(ancestor, "find") else None
+            if fc:
+                caption = fc.get_text(separator=" ", strip=True)
+                break
+            # Old PMC div.fig with div.caption
+            if ancestor.get("class") and "fig" in ancestor.get("class", []):
+                cap_div = ancestor.find("div", class_="caption")
+                if cap_div:
+                    caption = cap_div.get_text(separator=" ", strip=True)
+                break
+
+        if not caption:
+            caption = "Clinical image"
+
         images.append(_make_image_entry(pmcid, src, caption, len(images)))
-
-    # ── Strategy 2: div.fig (old PMC markup) ─────────────────────────────
-    if not images:
-        for fig in soup.find_all("div", class_="fig"):
-            img = fig.find("img")
-            if not img:
-                continue
-            src = img.get("src", "")
-            if not src:
-                continue
-            if src.startswith("/"):
-                src = "https://www.ncbi.nlm.nih.gov" + src
-            caption_div = fig.find("div", class_="caption")
-            caption = caption_div.get_text(separator=" ", strip=True) if caption_div else "Clinical image"
-            images.append(_make_image_entry(pmcid, src, caption, len(images)))
-
-    # ── Strategy 3: any img pointing to PMC CDN ──────────────────────────
-    if not images:
-        for img in soup.find_all("img"):
-            src = img.get("src", "") or img.get("data-src", "")
-            if "cdn.ncbi.nlm.nih.gov/pmc/" not in src and "/pmc/blobs/" not in src:
-                continue
-            caption = img.get("alt", "Clinical image")
-            images.append(_make_image_entry(pmcid, src, caption, len(images)))
 
     logger.info("Extracted %d images from PMC %s", len(images), pmcid)
     return images

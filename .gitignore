@@ -25,6 +25,7 @@ data/medsim.db
 # Dynamic media and user uploads
 data/imaging/dicom/
 data/imaging/tmp/
+data/imaging
 
 # OS-generated files
 .DS_Store

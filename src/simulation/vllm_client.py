@@ -108,6 +108,7 @@ class VLLMClient:
         messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 512,
+        timeout: float | None = None,
     ) -> str:
         """Send a chat completion request and return the response text."""
         payload = {
@@ -116,7 +117,7 @@ class VLLMClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout or self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=self._headers,
@@ -131,12 +132,14 @@ class VLLMClient:
         prompt: str,
         temperature: float = 0.7,
         max_tokens: int = 512,
+        timeout: float | None = None,
     ) -> str:
         """Single-turn generation from a raw prompt string."""
         return await self.chat_async(
             [{"role": "user", "content": prompt}],
             temperature=temperature,
             max_tokens=max_tokens,
+            timeout=timeout,
         )
 
     async def health_async(self) -> bool:

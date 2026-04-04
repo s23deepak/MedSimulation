@@ -28,6 +28,7 @@ def _repair_json(raw: str) -> str:
     - /* block comments */
     - Trailing commas before } or ]
     - Colon embedded inside key string: "key:" "value" → "key": "value"
+    - Truncated output (hit max_tokens mid-object)
     """
     # Strip // line comments (but not inside strings — approximate, handles 99% of cases)
     raw = re.sub(r"//[^\n\"]*", "", raw)
@@ -41,7 +42,46 @@ def _repair_json(raw: str) -> str:
     m = re.search(r"\{[\s\S]*\}", raw)
     if m:
         raw = m.group(0)
+    # Attempt to close truncated JSON (hit max_tokens mid-output)
+    raw = _close_truncated_json(raw)
     return raw.strip()
+
+
+def _close_truncated_json(raw: str) -> str:
+    """Close any unclosed strings, objects, and arrays caused by token truncation."""
+    stack = []
+    in_string = False
+    escape_next = False
+    for ch in raw:
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == "\\" and in_string:
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in ("{", "["):
+            stack.append("}" if ch == "{" else "]")
+        elif ch in ("}", "]"):
+            if stack and stack[-1] == ch:
+                stack.pop()
+
+    # Truncated mid-string: strip the dangling partial value up to last comma or {
+    if in_string:
+        cut = max(raw.rfind(","), raw.rfind("{"), raw.rfind("["))
+        if cut != -1:
+            raw = raw[:cut]
+        raw = re.sub(r",\s*$", "", raw)  # remove trailing comma after cut
+
+    # Close any still-open containers in reverse order
+    while stack:
+        raw += stack.pop()
+
+    return raw
 
 
 # ── Case structuring prompt ───────────────────────────────────────────────────
@@ -156,7 +196,7 @@ async def generate_case(
     try:
         if hasattr(vllm_client, "generate_async"):
             raw = await vllm_client.generate_async(
-                prompt, temperature=0.3, max_tokens=2000
+                prompt, temperature=0.3, max_tokens=3500, timeout=120.0
             )
         elif hasattr(vllm_client, "chat"):
             raw = vllm_client.chat(prompt)

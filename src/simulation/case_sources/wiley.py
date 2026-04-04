@@ -149,7 +149,7 @@ async def _doi_to_pmcid(doi: str) -> str | None:
     """Look up a PMCID for a DOI using the PubMed ID Converter API."""
     url = f"https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={doi}&idtype=doi&format=json"
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             r = await client.get(url, headers={"User-Agent": "MedSimulation/1.0"})
             if r.status_code == 200:
                 data = r.json()
@@ -163,13 +163,32 @@ async def _doi_to_pmcid(doi: str) -> str | None:
 
 async def extract_wiley_images(url: str) -> list[dict]:
     """Scrape image URLs and captions from a Wiley Open Access HTML page."""
-    if not url or "onlinelibrary.wiley.com" not in url:
+    if not url:
         return []
-        
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    # Accept doi.org URLs — construct the canonical Wiley article URL from the DOI
+    if "doi.org/" in url:
+        doi = url.split("doi.org/", 1)[-1]
+        url = f"https://onlinelibrary.wiley.com/doi/{doi}"
+    if "onlinelibrary.wiley.com" not in url:
+        return []
+
+    # Realistic browser headers — plain bot UA gets an immediate 403 from Wiley
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Referer": "https://onlinelibrary.wiley.com/",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
         try:
-            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 MedSimulation Bot"})
+            r = await client.get(url, headers=headers)
             if r.status_code != 200:
+                logger.warning("Wiley page returned %d for %s", r.status_code, url)
                 return []
         except Exception as e:
             logger.warning("Failed to fetch Wiley page %s: %s", url, e)
@@ -177,50 +196,68 @@ async def extract_wiley_images(url: str) -> list[dict]:
 
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(r.text, "html.parser")
-    
+
     images = []
-    # Wiley figures are typically inside <figure>
-    for fig in soup.find_all("figure"):
+
+    # Wiley figures live in <figure> or .article-figure containers.
+    # Images are often lazy-loaded — check data-src before src.
+    containers = soup.find_all("figure") or soup.find_all(class_="article-figure")
+    for fig in containers:
         img = fig.find("img")
-        if not img or not img.get("src"):
+        if not img:
             continue
-            
-        src = img["src"]
+
+        # Wiley lazy-loads high-res via data-lg-src; fall back to src
+        src = img.get("data-lg-src") or img.get("src", "")
+        if not src:
+            continue
+
+        # Resolve relative URLs — Wiley serves figures at /cms/asset/...
         if src.startswith("/"):
             src = "https://onlinelibrary.wiley.com" + src
-            
-        # Ignore structural/UI images
-        if "icon" in src.lower() or "logo" in src.lower() or "altmetric" in src.lower():
+
+        # Skip UI/structural images
+        src_lower = src.lower()
+        if any(kw in src_lower for kw in ("icon", "logo", "altmetric", "badge", "orcid")):
             continue
-            
-        # Get caption
-        caption_tag = fig.find("figcaption")
-        caption = caption_tag.get_text(separator=" ", strip=True) if caption_tag else "Clinical Image"
-        
-        # Determine modality
+        if src_lower.endswith(".svg"):
+            continue
+
+        # Caption lives in div.figure__caption-text (not raw figcaption text,
+        # which also contains "Open in figure viewer" / "PowerPoint" noise)
+        caption_div = fig.find("div", class_="figure__caption-text")
+        if caption_div:
+            caption = caption_div.get_text(separator=" ", strip=True)
+        else:
+            caption = img.get("alt", "Clinical image")
+        if not caption or any(kw in caption.lower() for kw in ("icon", "logo", "badge")):
+            continue
+
+        # Determine modality from caption
         mod = caption.lower()
-        if any(x in mod for x in ["x-ray", "radiograph", "cxr"]):
+        if any(x in mod for x in ["x-ray", "radiograph", "cxr", "plain film"]):
             modality = "XR"
-        elif any(x in mod for x in ["ct ", "computed tomography"]):
+        elif any(x in mod for x in ["ct ", "computed tomography", "fluoroscop"]):
             modality = "CT"
         elif any(x in mod for x in ["mri", "magnetic resonance"]):
             modality = "MRI"
-        elif any(x in mod for x in ["ecg", "electrocardiogram"]):
+        elif any(x in mod for x in ["ecg", "electrocardiogram", "ekg"]):
             modality = "ECG"
         elif any(x in mod for x in ["ultrasound", "sonogram", "uss", "pocus"]):
             modality = "US"
         else:
             modality = "PATH"
-            
+
         images.append({
-            "study_id": f"IMG-WILEY-{len(images)+1}",
+            "study_id": f"IMG-WILEY-{len(images) + 1}",
             "modality": modality,
-            "description": (caption[:60] + "...") if len(caption) > 60 else caption,
+            "description": (caption[:80] + "…") if len(caption) > 80 else caption,
             "file_path": src,
             "findings": caption,
-            "thumbnail": src
+            "thumbnail": src,
         })
-        
+
+    logger.info("Extracted %d images from Wiley HTML (%s)", len(images), url)
     return images
 
 # ── Full pipeline ─────────────────────────────────────────────────────────────
@@ -263,13 +300,13 @@ async def wiley_article_to_case(article: dict, vllm_client: Any) -> dict:
     
     # Phase G: Extract images — try Wiley HTML first, fall back to PMC
     images = []
-    if article.get("url"):
-        try:
-            images = await extract_wiley_images(article["url"])
-            if images:
-                logger.info("Extracted %d images from Wiley HTML (%s)", len(images), article["url"])
-        except Exception as e:
-            logger.warning("Wiley image extraction failed (%s): %s", article["url"], e)
+    article_url = article.get("url") or f"https://doi.org/{article['doi']}"
+    try:
+        images = await extract_wiley_images(article_url)
+        if images:
+            logger.info("Extracted %d images from Wiley HTML (%s)", len(images), article_url)
+    except Exception as e:
+        logger.warning("Wiley image extraction failed (%s): %s", article_url, e)
 
     if not images:
         # Wiley HTML blocked or empty — look up PMCID and use PMC extractor
