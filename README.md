@@ -123,6 +123,8 @@ sequenceDiagram
    uv sync --extra gpu
    ```
 
+   This installs both `vllm` and `bitsandbytes`, which the default launcher uses for quantized local inference.
+
 2. Copy the config template and edit `.env`:
    ```bash
    cp .env.example .env
@@ -132,7 +134,10 @@ sequenceDiagram
 3. Run the application:
    ```bash
    # If running locally with an LLM, start the vLLM server first:
-   bash scripts/start_vllm.sh
+   VLLM_MAX_MODEL_LEN=8192 bash scripts/start_vllm.sh
+
+   # Optional: disable bitsandbytes quantization on higher-VRAM GPUs
+   VLLM_QUANTIZATION=none bash scripts/start_vllm.sh
    
    # Start the FastAPI engine:
    uv run python main.py
