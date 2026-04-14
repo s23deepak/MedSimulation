@@ -6,7 +6,18 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <meta name="description"
         content="Clinical simulation lab — practice clinical reasoning with AI patients and expert feedback across emergency, surgical, and medical cases.">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MedSimulation">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+
     <title>Clinical Simulation Lab | MedSimulation</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,6 +41,37 @@
 
     <!-- Toast notifications -->
     <div class="toast-container" id="toastContainer" role="status" aria-live="polite"></div>
+
+    <!-- PWA Install Prompt -->
+    <div id="installPrompt" class="install-prompt" role="dialog" aria-labelledby="install-title" hidden>
+        <div class="install-prompt-content">
+            <div class="install-prompt-header">
+                <span class="install-icon">&#128241;</span>
+                <div>
+                    <h3 id="install-title">Install MedSimulation</h3>
+                    <p>Get quick access to clinical simulations anytime</p>
+                </div>
+                <button class="install-close" id="installClose" aria-label="Close install prompt">&times;</button>
+            </div>
+            <div class="install-prompt-body">
+                <ul>
+                    <li><span class="check">&#10003;</span> Works offline</li>
+                    <li><span class="check">&#10003;</span> Instant access from home screen</li>
+                    <li><span class="check">&#10003;</span> No app store required</li>
+                </ul>
+            </div>
+            <div class="install-prompt-actions">
+                <button class="btn-secondary" id="installLater">Later</button>
+                <button class="btn-primary" id="installBtn">Install</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Online/Offline Indicator -->
+    <div id="onlineIndicator" class="online-indicator" role="status" aria-live="polite" hidden>
+        <span class="status-dot"></span>
+        <span>You're offline - some features may be unavailable</span>
+    </div>
 
     <div class="sim-wrapper">
 
@@ -1082,6 +1124,148 @@ IV heparin bolus
             div.textContent = str;
             return div.innerHTML;
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PWA Service Worker & Install Prompt
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        let deferredPrompt = null;
+        const installPromptEl = document.getElementById('installPrompt');
+
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    const registration = await navigator.serviceWorker.register('/static/sw.js', {
+                        scope: '/'
+                    });
+                    console.log('[PWA] Service Worker registered:', registration.scope);
+
+                    // Check for updates periodically
+                    setInterval(() => {
+                        registration.update();
+                    }, 60000); // Check every minute
+
+                    // Listen for SW messages
+                    navigator.serviceWorker.addEventListener('message', (event) => {
+                        if (event.data && event.data.type === 'OFFLINE') {
+                            showOfflineIndicator();
+                        }
+                    });
+                } catch (error) {
+                    console.error('[PWA] SW registration failed:', error);
+                }
+            });
+        }
+
+        // Listen for install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            console.log('[PWA] Install prompt available');
+
+            // Show install prompt after a delay (don't be too aggressive)
+            const hasDismissed = localStorage.getItem('medsimulation_install_dismissed');
+            if (!hasDismissed) {
+                setTimeout(() => {
+                    showInstallPrompt();
+                }, 3000);
+            }
+        });
+
+        // Handle install button click
+        document.getElementById('installBtn').addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+
+            console.log('[PWA] User response to install prompt:', outcome);
+            deferredPrompt = null;
+            hideInstallPrompt();
+
+            if (outcome === 'accepted') {
+                showToast('Thanks for installing MedSimulation!', 'success');
+            }
+        });
+
+        // Handle "Later" button
+        document.getElementById('installLater').addEventListener('click', () => {
+            localStorage.setItem('medsimulation_install_dismissed', 'true');
+            hideInstallPrompt();
+        });
+
+        // Handle close button
+        document.getElementById('installClose').addEventListener('click', () => {
+            localStorage.setItem('medsimulation_install_dismissed', 'true');
+            hideInstallPrompt();
+        });
+
+        function showInstallPrompt() {
+            if (installPromptEl) {
+                installPromptEl.hidden = false;
+                installPromptEl.classList.add('show');
+            }
+        }
+
+        function hideInstallPrompt() {
+            if (installPromptEl) {
+                installPromptEl.classList.remove('show');
+                setTimeout(() => {
+                    installPromptEl.hidden = true;
+                }, 300);
+            }
+        }
+
+        // Online/Offline detection
+        const onlineIndicatorEl = document.getElementById('onlineIndicator');
+
+        function showOfflineIndicator() {
+            if (onlineIndicatorEl) {
+                onlineIndicatorEl.hidden = false;
+            }
+        }
+
+        function hideOfflineIndicator() {
+            if (onlineIndicatorEl) {
+                onlineIndicatorEl.hidden = true;
+            }
+        }
+
+        window.addEventListener('online', () => {
+            hideOfflineIndicator();
+            showToast('Connection restored', 'success');
+        });
+
+        window.addEventListener('offline', () => {
+            showOfflineIndicator();
+            showToast('You are offline', 'warning');
+        });
+
+        // Cache recommended cases for offline use
+        async function cacheRecommendedCases() {
+            try {
+                const res = await fetch('/api/cases/recommended');
+                if (res.ok) {
+                    const cases = await res.json();
+                    localStorage.setItem('medsimulation_cached_cases', JSON.stringify(cases));
+                }
+            } catch (e) {
+                console.warn('[PWA] Failed to cache cases:', e);
+            }
+        }
+
+        // Cache cases on page load
+        window.addEventListener('load', () => {
+            cacheRecommendedCases();
+        });
+
+        // Handle app installed event
+        window.addEventListener('appinstalled', () => {
+            console.log('[PWA] App was installed');
+            localStorage.setItem('medsimulation_install_dismissed', 'true');
+            hideInstallPrompt();
+        });
     </script>
 </body>
 
