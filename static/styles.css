@@ -975,6 +975,34 @@ select:focus:not(:focus-visible) {
     animation: cardFadeIn 0.25s var(--ease-out);
 }
 
+/* Inline exam results (appear right under each button) */
+.exam-result-inline {
+    background: var(--bg-primary);
+    border-radius: 8px;
+    padding: 0.625rem 0.875rem;
+    margin-top: 0.25rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--success);
+    animation: cardFadeIn 0.2s var(--ease-out);
+    grid-column: 1 / -1; /* Span full width */
+    max-width: 100%;
+}
+
+.exam-result-inline.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.exam-result-inline .result-name {
+    margin-bottom: 0.25rem;
+}
+
+.exam-result-inline .result-value {
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
 .result-name {
     font-size: 0.75rem;
     font-weight: 700;

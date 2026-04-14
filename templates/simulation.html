@@ -196,12 +196,8 @@
                         <!-- Exam tab -->
                         <div id="tab-exam" class="tab-content active" role="tabpanel">
                             <div class="tab-body">
-                                <p class="tab-help">Select a system to examine. Findings will be revealed.</p>
+                                <p class="tab-help">Select a system to examine. Findings will appear below.</p>
                                 <div class="system-grid" id="systemGrid"></div>
-                                <div id="examResult" class="result-item exam-result">
-                                    <div class="result-name" id="examResultName"></div>
-                                    <div class="result-value" id="examResultValue"></div>
-                                </div>
                             </div>
                         </div>
 
@@ -950,6 +946,20 @@ IV heparin bolus
         // ── Exam ──
         async function examSystem(system, btn) {
             if (!currentSession) return;
+
+            // Check if this exam already has a result (toggle off)
+            const existingResult = btn.nextElementSibling;
+            if (existingResult && existingResult.classList.contains('exam-result-inline') && btn.classList.contains('done')) {
+                existingResult.remove();
+                btn.classList.remove('done');
+                return;
+            }
+
+            // Remove any existing result for this button
+            if (existingResult && existingResult.classList.contains('exam-result-inline')) {
+                existingResult.remove();
+            }
+
             try {
                 const res = await fetch('/api/simulation/exam', {
                     method: 'POST',
@@ -959,15 +969,23 @@ IV heparin bolus
                 if (!res.ok) throw new Error('Exam request failed');
                 const data = await res.json();
                 btn.classList.add('done');
-                const examResult = document.getElementById('examResult');
-                examResult.classList.add('show');
-                document.getElementById('examResultName').textContent = data.system;
-                document.getElementById('examResultValue').textContent = data.findings;
+
+                // Create inline result div right after the button
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'exam-result-inline show';
+                resultDiv.innerHTML = `
+                    <div class="result-name">${escapeHtml(data.system)}</div>
+                    <div class="result-value">${escapeHtml(data.findings)}</div>
+                `;
+                btn.parentNode.insertBefore(resultDiv, btn.nextSibling);
             } catch (err) {
-                const examResult = document.getElementById('examResult');
-                examResult.classList.add('show');
-                document.getElementById('examResultName').textContent = system;
-                document.getElementById('examResultValue').innerHTML = `<span class="text-danger">${escapeHtml(err.message)}</span>`;
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'exam-result-inline show';
+                resultDiv.innerHTML = `
+                    <div class="result-name">${escapeHtml(system)}</div>
+                    <div class="result-value text-danger">${escapeHtml(err.message)}</div>
+                `;
+                btn.parentNode.insertBefore(resultDiv, btn.nextSibling);
             }
         }
 
