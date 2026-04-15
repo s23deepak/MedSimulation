@@ -23,7 +23,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css?v=2">
+    <link rel="stylesheet" href="/static/styles.css?v=3">
 </head>
 
 <body>
@@ -541,6 +541,9 @@ IV heparin bolus
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ arm_id: "auto_generated", success: true })
                 }).catch(e => console.error("Telemetry error", e));
+
+                // Refresh the case grid to show the newly generated case
+                await loadCases();
 
                 await startSimulation(data.case_id, residentName);
             } catch (err) {

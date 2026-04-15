@@ -117,15 +117,25 @@ class VLLMClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        logger.info("vLLM request: url=%s, model=%s, messages_count=%d, max_tokens=%d",
+                   self.base_url, self.model, len(messages), max_tokens)
+        logger.debug("vLLM payload: %s", payload)
         async with httpx.AsyncClient(timeout=timeout or self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+            try:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self._headers,
+                    json=payload,
+                )
+                logger.info("vLLM response: status=%d", response.status_code)
+                if response.status_code != 200:
+                    logger.error("vLLM error body: %s", response.text)
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            except Exception as e:
+                logger.error("vLLM request failed: %s", e)
+                raise
 
     async def generate_async(
         self,

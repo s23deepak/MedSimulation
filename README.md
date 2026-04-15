@@ -147,6 +147,105 @@ sequenceDiagram
 
 ---
 
+## ☁️ One-Click Deployment (Demo Mode)
+
+Deploy the entire application (frontend + backend + LLM) to Modal with a single command. Perfect for sharing demos without local GPU setup.
+
+### Quick Deploy
+
+```bash
+# 1. Install Modal CLI
+pip install modal
+
+# 2. Authenticate (first time only)
+modal setup
+
+# 3. Configure your deployment
+cp .env.modal.example .env.modal
+# Edit .env.modal to add your API keys (OpenAI for TTS, etc.)
+
+# 4. Deploy!
+modal deploy modal_app.py
+```
+
+**Your app is now live at:**
+```
+https://<your-workspace>--medsimulation-serve.modal.run
+```
+
+### Deployment Options
+
+| Option | Command | Cost | Use Case |
+|--------|---------|------|----------|
+| **GPU (default)** | `modal deploy modal_app.py` | ~$0.35/hr (T4) | Full features, local LLM |
+| **GPU (faster)** | `modal run modal_app.py --gpu A10G` | ~$0.60/hr (A10G) | Better performance |
+| **CPU + Cloud LLM** | `modal run modal_app.py --cpu` | ~$0.05/hr + tokens | Cheapest, needs API key |
+
+### Cost Management
+
+The deployment uses `container_idle_timeout=300`, meaning:
+- Container shuts down after 5 minutes of inactivity
+- You only pay for actual usage time
+- Cold start takes ~30-60 seconds when accessed after idle
+
+**Estimated monthly cost for demo use (2-3 hrs/day): $20-40**
+
+### Configuration
+
+Edit `.env.modal` to customize:
+
+```bash
+# Model selection
+VLLM_MODEL=google/medgemma-4b-it
+
+# GPU tuning
+VLLM_GPU_MEMORY=0.7        # Higher = more model, less cache
+VLLM_MAX_MODEL_LEN=4096    # Context window size
+
+# Use cloud LLM instead of local GPU
+VLLM_MODE=cloud
+VLLM_CLOUD_URL=https://api.together.xyz/v1
+VLLM_CLOUD_API_KEY=your_key
+```
+
+### Persistent Data
+
+Case data, database, and imaging files are stored in a Modal Volume that persists across deployments:
+- Database: `/data/medsim.db`
+- Imaging: `/data/imaging/`
+
+### Troubleshooting
+
+```bash
+# View deployment logs
+modal app logs medsimulation
+
+# Redeploy after code changes
+modal deploy modal_app.py
+
+# Delete deployment
+modal app delete medsimulation
+```
+
+### Alternative: Together AI + Railway
+
+For even lower cost, use Together AI for the LLM and deploy the backend to Railway:
+
+```bash
+# 1. Set up .env for cloud mode
+VLLM_MODE=cloud
+VLLM_CLOUD_URL=https://api.together.xyz/v1
+VLLM_CLOUD_API_KEY=your_together_key
+
+# 2. Deploy to Railway
+railway init
+railway up
+```
+
+**Cost:** ~$5-15/month total (Railway free tier + Together AI tokens)
+
+---
+
 ## 🏥 Simulation Domains
 
 MedSimulation tracks and evaluates five critical domains during an encounter:

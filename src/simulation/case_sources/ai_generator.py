@@ -195,8 +195,9 @@ async def generate_case(
 
     try:
         if hasattr(vllm_client, "generate_async"):
+            # Reduced max_tokens to fit within model's 4096 context limit
             raw = await vllm_client.generate_async(
-                prompt, temperature=0.3, max_tokens=3500, timeout=120.0
+                prompt, temperature=0.3, max_tokens=1500, timeout=120.0
             )
         elif hasattr(vllm_client, "chat"):
             raw = vllm_client.chat(prompt)

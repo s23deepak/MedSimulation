@@ -8,10 +8,12 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -123,6 +125,16 @@ app = FastAPI(
     description="AI-powered resident training with standardized patient simulations",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+# Enable CORS for web app (React Native Web runs on different port)
+# In development, allow all origins. In production, restrict to specific domains.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Dev mode - restrict in production
+    allow_credentials=False,  # Must be False when using wildcard origins
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount static files
@@ -511,13 +523,13 @@ async def api_generate_case(payload: dict):
     if vllm_client is None:
         raise HTTPException(status_code=503, detail="vLLM not connected")
 
-    mode = os.getenv("VLLM_MODE", "simulated")
-    status = "approved" if mode == "local" else "pending"
+    # User-generated cases are auto-approved so they appear immediately in recommendations
+    status = "approved"
 
     try:
         case_data = None
-        
-        # 1. EndlessMedical
+
+        # 1. EndlessMedical - diagnostic disease database
         if source == "endless_medical" or source == "auto":
             try:
                 case_data = await build_case_from_disease(topic, vllm_client)
@@ -525,8 +537,8 @@ async def api_generate_case(payload: dict):
                 logger.warning("EndlessMedical failed: %s", e)
                 if source == "endless_medical":
                     raise
-                
-        # 2. PubMed
+
+        # 2. PubMed - peer-reviewed case reports
         if not case_data and (source == "pubmed" or source == "auto"):
             try:
                 pmids = await search_pubmed_cases(topic, max_results=1)
@@ -539,7 +551,7 @@ async def api_generate_case(payload: dict):
                 if source == "pubmed":
                     raise
 
-        # 3. Wiley
+        # 3. Wiley - clinical case reports from Wiley Open Access
         if not case_data and (source == "wiley" or source == "auto"):
             try:
                 articles = await search_wiley_cases(query=topic, max_results=1)

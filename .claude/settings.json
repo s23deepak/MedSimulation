@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H 'Content-Type: application/json' -d '{\"resident_name\": \"TestUser\", \"case_id\": \"DYN-77D8021B\"}')",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H 'Content-Type: application/json' -d '{\"resident_name\": \"TestUser\", \"case_id\": \"DYN-0F663494\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H 'Content-Type: application/json' -d '{\"resident_name\": \"TestUser\", \"case_id\": \"DYN-C538CE9F\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H 'Content-Type: application/json' -d '{\"resident_name\": \"TestUser\", \"case_id\": \"AC-MQ-0001\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H \"Content-Type: application/json\" -d '{\"resident_name\": \"TestUser\", \"case_id\": \"DYN-77D8021B\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H \"Content-Type: application/json\" -d '{\"resident_name\": \"TestUser\", \"case_id\": \"DYN-0F663494\"}')",
+      "Bash(curl -s \"http://localhost:8000/api/cases/DYN-77D8021B\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H 'Content-Type: application/json' -d '{\"resident_name\": \"Test\", \"case_id\": \"DYN-77D8021B\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"http://localhost:8000/api/cases/DYN-01BF2354\")",
+      "Bash(curl -I \"https://cdn.ncbi.nlm.nih.gov/pmc/blobs/b72b/13075864/87802fd457f4/cureus-0018-00000105198-i01.jpg\")",
+      "Bash(curl -s \"http://localhost:8000/api/cases/recommended?limit=20\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H 'Content-Type: application/json' -d '{\"resident_name\": \"Test\", \"case_id\": \"DYN-01BF2354\"}')",
+      "Bash(curl -s \"http://localhost:8000/api/cases/list\")",
+      "Bash(curl -s \"http://localhost:8000/api/cases/recommended?limit=50\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/start -H 'Content-Type: application/json' -d '{\"resident_name\": \"Mobile User\", \"case_id\": \"DYN-77D8021B\"}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/simulation/submit -H 'Content-Type: application/json' -d '{\"session_id\": \"test\", \"diagnosis\": \"\", \"management\": []}')",
+      "Bash(pkill -f \"uvicorn main:app\")",
+      "Bash(curl -s http://localhost:8000/api/cases/recommended?limit=2)",
+      "Bash(python3 -c \"import sys,json; cases=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\([f\\\\\"{c['case_id']}: {c['title']} [{c['difficulty']}]\\\\\" for c in cases]\\)\\)\")",
+      "Bash(curl -s \"http://localhost:8000/api/cases/generate\" -X POST -H \"Content-Type: application/json\" -d '{\"topic\":\"headache\",\"source\":\"auto\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Generated: {d}'\\)\")",
+      "Bash(curl -s \"http://localhost:8000/api/cases/recommended?limit=8\")",
+      "Bash(python3 -c \"import sys,json; cases=json.load\\(sys.stdin\\); [print\\(f\\\\\"{c['case_id']}: {c['title']} [{c['difficulty']}]\\\\\"\\) for c in cases]\")",
+      "Bash(curl -s http://localhost:8000/api/cases/recommended?limit=3)",
+      "Bash(python3 -c \"import sys,json; cases=json.load\\(sys.stdin\\); [print\\(f'{c[\\\\\"case_id\\\\\"]}: {c[\\\\\"title\\\\\"]} [{c[\\\\\"difficulty\\\\\"]}]'\\) for c in cases]\")"
+    ]
+  }
+}

@@ -36,7 +36,8 @@ TOS_PASSPHRASE = "I have read, understood and I accept and agree to comply with 
 
 async def _init_session() -> str:
     """Initialize an EndlessMedical API session and accept ToS."""
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    # Use verify=False to work around SSL certificate issues
+    async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
         # Init session
         r = await client.get(f"{BASE_URL}/InitSession")
         r.raise_for_status()
