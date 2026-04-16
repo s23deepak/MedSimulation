@@ -32,7 +32,7 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
 fi
 
 echo "╔═══════════════════════════════════════════════════════╗"
-echo "║  MedSimulation — vLLM Server                         ║"
+echo "║  MedSimulation — vLLM Server                          ║"
 echo "╠═══════════════════════════════════════════════════════╣"
 echo "║  Model:   ${MODEL}"
 echo "║  Port:    ${PORT}"

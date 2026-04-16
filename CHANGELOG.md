@@ -109,9 +109,13 @@ const mapDifficulty = (difficulty: string): 'easy' | 'medium' | 'hard' => {
 
 **Files Changed:**
 - `src/simulation/case_sources/ai_generator.py` - Removed portrait generation code, helper functions (`_extract_age_from_presentation`, `_extract_sex_from_presentation`), and OpenAI imports
-- `src/simulation/media.py` - `generate_patient_portrait()` function now unused (can be removed in future cleanup)
+- `src/simulation/case_sources/agentclinic.py` - Removed portrait generation for AgentClinic dataset imports
+- `src/simulation/media.py` - Removed `generate_patient_portrait()` function entirely, cleaned up unused imports
 
-**Impact:** All new cases will have empty `patient_image_url` field. Physical Exam tab will not display patient portraits.
+**Impact:**
+- All new cases will have empty `patient_image_url` field
+- Physical Exam tab will not display patient portraits
+- Existing cases in database still have portraits - run `python scripts/clear_patient_portraits.py` to clear them
 
 ### 📊 Files Changed
 
@@ -120,7 +124,10 @@ const mapDifficulty = (difficulty: string): 'easy' | 'medium' | 'hard' => {
 - `README.md` - Added mobile app section
 - `CHANGELOG.md` - New file
 - `src/simulation/case_sources/ai_generator.py` - Removed DALL-E portrait generation, simplified to set empty `patient_image_url`
+- `src/simulation/case_sources/agentclinic.py` - Removed DALL-E portrait generation from AgentClinic imports
+- `src/simulation/media.py` - Removed `generate_patient_portrait()` function, cleaned up unused imports
 - `templates/simulation.html` - Added `await loadCases()` after generation, cache busting version update
+- `scripts/clear_patient_portraits.py` - New script to clear existing portraits from database
 
 **Mobile (`MedSimulation-App/`):**
 - `app/index.tsx` - Auto-open, case fetching, visual indicator, FlatList fixes
