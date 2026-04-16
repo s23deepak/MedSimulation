@@ -6,13 +6,25 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <meta name="description"
         content="Clinical simulation lab — practice clinical reasoning with AI patients and expert feedback across emergency, surgical, and medical cases.">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MedSimulation">
+    <!-- Note: SVG used for apple-touch-icon; for production, generate PNG for best iOS support -->
+    <link rel="apple-touch-icon" href="/static/icon-192.svg">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+
     <title>Clinical Simulation Lab | MedSimulation</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css?v=2">
+    <link rel="stylesheet" href="/static/styles.css?v=3">
 </head>
 
 <body>
@@ -30,6 +42,37 @@
 
     <!-- Toast notifications -->
     <div class="toast-container" id="toastContainer" role="status" aria-live="polite"></div>
+
+    <!-- PWA Install Prompt -->
+    <div id="installPrompt" class="install-prompt" role="dialog" aria-labelledby="install-title" hidden>
+        <div class="install-prompt-content">
+            <div class="install-prompt-header">
+                <span class="install-icon">&#128241;</span>
+                <div>
+                    <h3 id="install-title">Install MedSimulation</h3>
+                    <p>Get quick access to clinical simulations anytime</p>
+                </div>
+                <button class="install-close" id="installClose" aria-label="Close install prompt">&times;</button>
+            </div>
+            <div class="install-prompt-body">
+                <ul>
+                    <li><span class="check">&#10003;</span> Works offline</li>
+                    <li><span class="check">&#10003;</span> Instant access from home screen</li>
+                    <li><span class="check">&#10003;</span> No app store required</li>
+                </ul>
+            </div>
+            <div class="install-prompt-actions">
+                <button class="btn-secondary" id="installLater">Later</button>
+                <button class="btn-primary" id="installBtn">Install</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Online/Offline Indicator -->
+    <div id="onlineIndicator" class="online-indicator" role="status" aria-live="polite" hidden>
+        <span class="status-dot"></span>
+        <span>You're offline - some features may be unavailable</span>
+    </div>
 
     <div class="sim-wrapper">
 
@@ -154,12 +197,8 @@
                         <!-- Exam tab -->
                         <div id="tab-exam" class="tab-content active" role="tabpanel">
                             <div class="tab-body">
-                                <p class="tab-help">Select a system to examine. Findings will be revealed.</p>
+                                <p class="tab-help">Select a system to examine. Findings will appear below.</p>
                                 <div class="system-grid" id="systemGrid"></div>
-                                <div id="examResult" class="result-item exam-result">
-                                    <div class="result-name" id="examResultName"></div>
-                                    <div class="result-value" id="examResultValue"></div>
-                                </div>
                             </div>
                         </div>
 
@@ -323,6 +362,31 @@ IV heparin bolus
                 </div>
             </div>
         </div>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div class="footer-content">
+                <div class="footer-left">
+                    <span class="footer-logo">&#9877;</span>
+                    <span class="footer-text">MedSimulation</span>
+                </div>
+                <div class="footer-center">
+                    <span class="footer-copyright">&copy; 2026 Deepak Swaminathan. All rights reserved.</span>
+                </div>
+                <div class="footer-right">
+                    <a href="https://www.linkedin.com/in/deepak-swaminathan-90a707153/" target="_blank" rel="noopener" class="footer-link" aria-label="LinkedIn">
+                        <svg class="footer-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                        </svg>
+                    </a>
+                    <a href="mailto:23.deepak.s@gmail.com" class="footer-link" aria-label="Email">
+                        <svg class="footer-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                            <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </footer>
 
     </div>
 
@@ -503,6 +567,9 @@ IV heparin bolus
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ arm_id: "auto_generated", success: true })
                 }).catch(e => console.error("Telemetry error", e));
+
+                // Refresh the case grid to show the newly generated case
+                await loadCases();
 
                 await startSimulation(data.case_id, residentName);
             } catch (err) {
@@ -908,6 +975,20 @@ IV heparin bolus
         // ── Exam ──
         async function examSystem(system, btn) {
             if (!currentSession) return;
+
+            // Check if this exam already has a result (toggle off)
+            const existingResult = btn.nextElementSibling;
+            if (existingResult && existingResult.classList.contains('exam-result-inline') && btn.classList.contains('done')) {
+                existingResult.remove();
+                btn.classList.remove('done');
+                return;
+            }
+
+            // Remove any existing result for this button
+            if (existingResult && existingResult.classList.contains('exam-result-inline')) {
+                existingResult.remove();
+            }
+
             try {
                 const res = await fetch('/api/simulation/exam', {
                     method: 'POST',
@@ -917,15 +998,23 @@ IV heparin bolus
                 if (!res.ok) throw new Error('Exam request failed');
                 const data = await res.json();
                 btn.classList.add('done');
-                const examResult = document.getElementById('examResult');
-                examResult.classList.add('show');
-                document.getElementById('examResultName').textContent = data.system;
-                document.getElementById('examResultValue').textContent = data.findings;
+
+                // Create inline result div right after the button
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'exam-result-inline show';
+                resultDiv.innerHTML = `
+                    <div class="result-name">${escapeHtml(data.system)}</div>
+                    <div class="result-value">${escapeHtml(data.findings)}</div>
+                `;
+                btn.parentNode.insertBefore(resultDiv, btn.nextSibling);
             } catch (err) {
-                const examResult = document.getElementById('examResult');
-                examResult.classList.add('show');
-                document.getElementById('examResultName').textContent = system;
-                document.getElementById('examResultValue').innerHTML = `<span class="text-danger">${escapeHtml(err.message)}</span>`;
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'exam-result-inline show';
+                resultDiv.innerHTML = `
+                    <div class="result-name">${escapeHtml(system)}</div>
+                    <div class="result-value text-danger">${escapeHtml(err.message)}</div>
+                `;
+                btn.parentNode.insertBefore(resultDiv, btn.nextSibling);
             }
         }
 
@@ -1082,6 +1171,148 @@ IV heparin bolus
             div.textContent = str;
             return div.innerHTML;
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PWA Service Worker & Install Prompt
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        let deferredPrompt = null;
+        const installPromptEl = document.getElementById('installPrompt');
+
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    const registration = await navigator.serviceWorker.register('/static/sw.js', {
+                        scope: '/'
+                    });
+                    console.log('[PWA] Service Worker registered:', registration.scope);
+
+                    // Check for updates periodically
+                    setInterval(() => {
+                        registration.update();
+                    }, 60000); // Check every minute
+
+                    // Listen for SW messages
+                    navigator.serviceWorker.addEventListener('message', (event) => {
+                        if (event.data && event.data.type === 'OFFLINE') {
+                            showOfflineIndicator();
+                        }
+                    });
+                } catch (error) {
+                    console.error('[PWA] SW registration failed:', error);
+                }
+            });
+        }
+
+        // Listen for install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            console.log('[PWA] Install prompt available');
+
+            // Show install prompt after a delay (don't be too aggressive)
+            const hasDismissed = localStorage.getItem('medsimulation_install_dismissed');
+            if (!hasDismissed) {
+                setTimeout(() => {
+                    showInstallPrompt();
+                }, 3000);
+            }
+        });
+
+        // Handle install button click
+        document.getElementById('installBtn').addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+
+            console.log('[PWA] User response to install prompt:', outcome);
+            deferredPrompt = null;
+            hideInstallPrompt();
+
+            if (outcome === 'accepted') {
+                showToast('Thanks for installing MedSimulation!', 'success');
+            }
+        });
+
+        // Handle "Later" button
+        document.getElementById('installLater').addEventListener('click', () => {
+            localStorage.setItem('medsimulation_install_dismissed', 'true');
+            hideInstallPrompt();
+        });
+
+        // Handle close button
+        document.getElementById('installClose').addEventListener('click', () => {
+            localStorage.setItem('medsimulation_install_dismissed', 'true');
+            hideInstallPrompt();
+        });
+
+        function showInstallPrompt() {
+            if (installPromptEl) {
+                installPromptEl.hidden = false;
+                installPromptEl.classList.add('show');
+            }
+        }
+
+        function hideInstallPrompt() {
+            if (installPromptEl) {
+                installPromptEl.classList.remove('show');
+                setTimeout(() => {
+                    installPromptEl.hidden = true;
+                }, 300);
+            }
+        }
+
+        // Online/Offline detection
+        const onlineIndicatorEl = document.getElementById('onlineIndicator');
+
+        function showOfflineIndicator() {
+            if (onlineIndicatorEl) {
+                onlineIndicatorEl.hidden = false;
+            }
+        }
+
+        function hideOfflineIndicator() {
+            if (onlineIndicatorEl) {
+                onlineIndicatorEl.hidden = true;
+            }
+        }
+
+        window.addEventListener('online', () => {
+            hideOfflineIndicator();
+            showToast('Connection restored', 'success');
+        });
+
+        window.addEventListener('offline', () => {
+            showOfflineIndicator();
+            showToast('You are offline', 'warning');
+        });
+
+        // Cache recommended cases for offline use
+        async function cacheRecommendedCases() {
+            try {
+                const res = await fetch('/api/cases/recommended');
+                if (res.ok) {
+                    const cases = await res.json();
+                    localStorage.setItem('medsimulation_cached_cases', JSON.stringify(cases));
+                }
+            } catch (e) {
+                console.warn('[PWA] Failed to cache cases:', e);
+            }
+        }
+
+        // Cache cases on page load
+        window.addEventListener('load', () => {
+            cacheRecommendedCases();
+        });
+
+        // Handle app installed event
+        window.addEventListener('appinstalled', () => {
+            console.log('[PWA] App was installed');
+            localStorage.setItem('medsimulation_install_dismissed', 'true');
+            hideInstallPrompt();
+        });
     </script>
 </body>
 

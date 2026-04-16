@@ -20,8 +20,7 @@ Never run out of cases to practice. MedSimulation features a robust ingestion pi
 - **AgentClinic Format:** Imports pre-structured AI multi-agent medical evaluation benchmarks.
 - **Free-text AI Generation:** Generates bespoke clinical cases from a single symptom or scenario prompt.
 
-### 🖼️ Generative Patient Media
-- **Photorealistic Portraits**: DALL-E 3 generates highly realistic patient portraits matching the clinical presentation upon case creation. Viewable in the Physical Exam tab.
+### 🎙️ Patient Voice
 - **Conversational Text-to-Speech**: Integrated OpenAI TTS-1 automatically voices the patient's dialogue out loud during history taking, adapting the voice (`alloy` or `nova`) based on the patient's demographics.
 
 ### 🧠 Adaptive Learning & Engagement
@@ -147,6 +146,108 @@ sequenceDiagram
 
 ---
 
+## ☁️ One-Click Deployment (Demo Mode)
+
+Deploy the entire application (frontend + backend + LLM) to Modal with a single command. Perfect for sharing demos without local GPU setup.
+
+### Quick Deploy
+
+```bash
+# 1. Install Modal in your venv
+uv add modal
+
+# 2. Authenticate (first time only)
+python -m modal setup
+# Follow the browser link to authenticate
+
+# 3. Create Modal secrets for HuggingFace (required for MedGemma)
+# Get token at: https://huggingface.co/settings/tokens
+modal secret create medsimulation-secrets \
+    HF_TOKEN=hf_your_token_here \
+    OPENAI_API_KEY=sk_your_key_here
+
+# 4. Deploy!
+modal deploy modal_app.py
+```
+
+**Your app is now live at:**
+```
+https://<your-workspace>--medsimulation-serve.modal.run
+```
+
+### Deployment Options
+
+| Option | Command | Cost | Use Case |
+|--------|---------|------|----------|
+| **GPU (default)** | `modal deploy modal_app.py` | ~$0.35/hr (T4) | Full features, local LLM |
+| **GPU (faster)** | `modal run modal_app.py --gpu A10G` | ~$0.60/hr (A10G) | Better performance |
+| **CPU + Cloud LLM** | `modal run modal_app.py --cpu` | ~$0.05/hr + tokens | Cheapest, needs API key |
+
+### Cost Management
+
+The deployment uses `container_idle_timeout=300`, meaning:
+- Container shuts down after 5 minutes of inactivity
+- You only pay for actual usage time
+- Cold start takes ~30-60 seconds when accessed after idle
+
+**Estimated monthly cost for demo use (2-3 hrs/day): $20-40**
+
+### Configuration
+
+Edit `.env.modal` to customize:
+
+```bash
+# Model selection
+VLLM_MODEL=google/medgemma-4b-it
+
+# GPU tuning
+VLLM_GPU_MEMORY=0.7        # Higher = more model, less cache
+VLLM_MAX_MODEL_LEN=4096    # Context window size
+
+# Use cloud LLM instead of local GPU
+VLLM_MODE=cloud
+VLLM_CLOUD_URL=https://api.together.xyz/v1
+VLLM_CLOUD_API_KEY=your_key
+```
+
+### Persistent Data
+
+Case data, database, and imaging files are stored in a Modal Volume that persists across deployments:
+- Database: `/data/medsim.db`
+- Imaging: `/data/imaging/`
+
+### Troubleshooting
+
+```bash
+# View deployment logs
+modal app logs medsimulation
+
+# Redeploy after code changes
+modal deploy modal_app.py
+
+# Delete deployment
+modal app delete medsimulation
+```
+
+### Alternative: Together AI + Railway
+
+For even lower cost, use Together AI for the LLM and deploy the backend to Railway:
+
+```bash
+# 1. Set up .env for cloud mode
+VLLM_MODE=cloud
+VLLM_CLOUD_URL=https://api.together.xyz/v1
+VLLM_CLOUD_API_KEY=your_together_key
+
+# 2. Deploy to Railway
+railway init
+railway up
+```
+
+**Cost:** ~$5-15/month total (Railway free tier + Together AI tokens)
+
+---
+
 ## 🏥 Simulation Domains
 
 MedSimulation tracks and evaluates five critical domains during an encounter:
@@ -201,7 +302,7 @@ MedSimulation/
 ### UX & Clinical Realism
 - **Lab/Imaging results for newly ordered tests**: When a resident orders a test not pre-loaded in the case (e.g. selecting a CBC mid-simulation), the UI currently returns "no result available." The system should dynamically generate plausible, case-consistent results for any ordered test rather than surfacing a dead-end.
 - **Speech-to-text input for doctors**: Typing is not natural for clinicians during a simulated encounter. Integrate Whisper (local) or OpenAI Whisper API so residents can speak their questions/orders and have them transcribed into the input field. This is especially important for hands-free workflow and realism.
-- **Text-to-speech for patient responses**: Displaying the patient's reply as readable text lets residents re-read it indefinitely, which is unrealistic. Convert patient dialogue to audio (OpenAI TTS-1 or equivalent) so the resident must listen attentively — mirroring a real clinical encounter. Text display should be suppressed or delayed.
+- ~~**Text-to-speech for patient responses**~~: Implemented — OpenAI TTS-1 voices patient dialogue during history taking with gender-appropriate voices (`alloy` for male, `nova` for female).
 
 ### Scoring & Quality Metrics
 - **Patient satisfaction score**: Track and penalise repetitive or unnecessary questions during history taking. Frequent redundant queries lower the simulated patient's satisfaction score — surfaced in the debrief as a proxy for bedside manner and efficiency. This score directly affects the hospital's simulated quality metrics.
@@ -236,6 +337,26 @@ MedSimulation/
 ### Lower Lift
 
 - **Multi-Agent Scoring Panel**: Runs 3 specialist agents in parallel instead of a single senior clinician call — a Clinician agent (medical accuracy), a Teacher agent (reasoning order: history before exam before diagnosis), and a Patient Safety agent (flags dangerous omissions such as missed sepsis workup or delayed imaging). Scores are aggregated for the final result.
+
+## 📱 Mobile App (MedSimulation-App)
+
+A React Native mobile application providing on-the-go clinical simulation training.
+
+**Features:**
+- Full case library access with difficulty-based color coding
+- AI-powered case generation from any medical topic
+- Auto-open simulation after generation
+- Touch-optimized clinical assessment workflow
+- Offline-capable case caching
+- Visual "NEW" indicator for generated cases
+
+**Documentation:**
+- [`README.md`](../MedSimulation-App/README.md) - Full mobile app documentation
+- [`UX_DECISIONS.md`](../MedSimulation-App/UX_DECISIONS.md) - Design decisions and future enhancements
+
+**Tech Stack:** React Native + Expo, TypeScript, WatermelonDB, Zustand
+
+---
 
 ## License
 MIT License

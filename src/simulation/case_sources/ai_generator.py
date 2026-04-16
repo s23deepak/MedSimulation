@@ -12,11 +12,7 @@ import json
 import logging
 import re
 import uuid
-import os
 from typing import Any
-from openai import AsyncOpenAI
-
-from src.simulation.media import generate_patient_portrait
 
 logger = logging.getLogger(__name__)
 
@@ -195,8 +191,9 @@ async def generate_case(
 
     try:
         if hasattr(vllm_client, "generate_async"):
+            # Reduced max_tokens to fit within model's 4096 context limit
             raw = await vllm_client.generate_async(
-                prompt, temperature=0.3, max_tokens=3500, timeout=120.0
+                prompt, temperature=0.3, max_tokens=1500, timeout=120.0
             )
         elif hasattr(vllm_client, "chat"):
             raw = vllm_client.chat(prompt)
@@ -230,14 +227,8 @@ async def generate_case(
         # Validate and fill defaults for missing fields
         _ensure_case_quality(case_data)
         
-        # Phase E: Generate a DALL-E portrait
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key:
-            client = AsyncOpenAI(api_key=openai_key)
-            portrait_url = await generate_patient_portrait(client, case_data.get("presentation", ""))
-            case_data["patient_image_url"] = portrait_url
-        else:
-            case_data["patient_image_url"] = ""
+        # Patient portrait generation disabled - not clinically useful
+        case_data["patient_image_url"] = ""
 
         logger.info(
             "Generated case %s from %s source (ref=%s)",

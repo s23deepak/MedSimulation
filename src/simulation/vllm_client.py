@@ -26,6 +26,9 @@ _DEFAULT_LOCAL_URL = "http://localhost:8001/v1"
 _DEFAULT_LOCAL_MODEL = "google/medgemma-4b-it"
 _DEFAULT_CLOUD_MODEL = "google/medgemma-27b-it"
 
+# Debug flag for logging full payloads (off by default - potential data exposure)
+_DEBUG_LOG_PAYLOAD = os.getenv("DEBUG_LOG_PAYLOAD", "").lower() in ("true", "1", "yes")
+
 
 class VLLMClient:
     """
@@ -117,15 +120,28 @@ class VLLMClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        logger.info("vLLM request: url=%s, model=%s, messages_count=%d, max_tokens=%d",
+                   self.base_url, self.model, len(messages), max_tokens)
+        if _DEBUG_LOG_PAYLOAD:
+            logger.debug("vLLM payload: %s", payload)
+        else:
+            logger.debug("vLLM payload: [redacted - set DEBUG_LOG_PAYLOAD=1 to log]")
         async with httpx.AsyncClient(timeout=timeout or self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+            try:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self._headers,
+                    json=payload,
+                )
+                logger.info("vLLM response: status=%d", response.status_code)
+                if response.status_code != 200:
+                    logger.error("vLLM error body: %s", response.text)
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            except Exception as e:
+                logger.error("vLLM request failed: %s", e)
+                raise
 
     async def generate_async(
         self,

@@ -20,6 +20,7 @@ We use it to:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -31,12 +32,19 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.endlessmedical.com/v1/dx"
 TOS_PASSPHRASE = "I have read, understood and I accept and agree to comply with the Terms of Use of EndlessMedical API and target Applications. The Terms of Use are available on endlessmedical.com"
 
+# Allow disabling SSL verification for local dev with self-signed certs
+# WARNING: Never use in production - enables MITM attacks
+_SKIP_SSL_VERIFY = os.getenv("DEV_SKIP_SSL_VERIFY", "").lower() in ("true", "1", "yes")
+
 
 # ── Session management ────────────────────────────────────────────────────────
 
 async def _init_session() -> str:
     """Initialize an EndlessMedical API session and accept ToS."""
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    # WARNING: verify=False disables TLS validation - only for local dev
+    if _SKIP_SSL_VERIFY:
+        logger.warning("SSL verification disabled - insecure, dev-only setting")
+    async with httpx.AsyncClient(timeout=15.0, verify=not _SKIP_SSL_VERIFY) as client:
         # Init session
         r = await client.get(f"{BASE_URL}/InitSession")
         r.raise_for_status()

@@ -20,12 +20,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-import os
 from pathlib import Path
 from typing import Any
-from openai import AsyncOpenAI
-
-from src.simulation.media import generate_patient_portrait
 
 logger = logging.getLogger(__name__)
 
@@ -321,24 +317,12 @@ async def import_agentclinic(
         records = records[:max_cases]
 
     cases = []
-    
-    # Phase E: Prepare Image Gen Client
-    openai_key = os.getenv("OPENAI_API_KEY")
-    client = None
-    if openai_key:
-        client = AsyncOpenAI(api_key=openai_key)
-        
+
     for record in records:
         try:
             case = convert_to_clinical_case(record, dataset)
-            
-            # Generate portrait
-            if client:
-                portrait_url = await generate_patient_portrait(client, case.get("presentation", ""))
-                case["patient_image_url"] = portrait_url
-            else:
-                case["patient_image_url"] = ""
-                
+            # Patient portrait generation disabled
+            case["patient_image_url"] = ""
             cases.append(case)
         except Exception as e:
             logger.warning("Failed to convert AgentClinic record: %s", e)

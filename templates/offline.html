@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2563eb">
+    <title>Offline | MedSimulation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .offline-container {
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .offline-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .retry-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .retry-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .retry-btn:active {
+            transform: scale(0.98);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            padding: 0.75rem 1rem;
+            background: #fef3c7;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            color: #92400e;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #f59e0b;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .cached-cases {
+            margin-top: 2rem;
+            text-align: left;
+            width: 100%;
+        }
+
+        .cached-cases h3 {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .cached-list {
+            list-style: none;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .cached-list li {
+            padding: 0.75rem 1rem;
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.875rem;
+        }
+
+        .cached-list li:last-child {
+            border-bottom: none;
+        }
+
+        .cached-list li.empty {
+            color: var(--text-secondary);
+            font-style: italic;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <div class="offline-icon">&#128268;</div>
+        <h1>You're Offline</h1>
+        <p>
+            It looks like you've lost your internet connection.
+            Some features may be unavailable until you're back online.
+        </p>
+
+        <button class="retry-btn" onclick="retryConnection()">
+            <span>&#8635;</span>
+            Retry Connection
+        </button>
+
+        <div class="status-indicator" id="statusIndicator">
+            <span class="status-dot"></span>
+            <span>Waiting for connection...</span>
+        </div>
+
+        <div class="cached-cases" id="cachedCases">
+            <h3>Available Offline</h3>
+            <ul class="cached-list" id="cachedList">
+                <li class="empty">No cases cached for offline use</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Check online status
+        function updateStatus() {
+            const indicator = document.getElementById('statusIndicator');
+            if (navigator.onLine) {
+                indicator.style.background = '#dcfce7';
+                indicator.style.color = '#166534';
+                indicator.innerHTML = '<span class="status-dot" style="background: #22c55e;"></span><span>Connection restored! Redirecting...</span>';
+                setTimeout(() => {
+                    window.location.href = '/simulation';
+                }, 1500);
+            }
+        }
+
+        // Retry connection
+        function retryConnection() {
+            if (navigator.onLine) {
+                window.location.href = '/simulation';
+            } else {
+                // Try to fetch health endpoint
+                fetch('/api/health')
+                    .then(response => {
+                        if (response.ok) {
+                            window.location.href = '/simulation';
+                        }
+                    })
+                    .catch(() => {
+                        alert('Still offline. Please check your connection.');
+                    });
+            }
+        }
+
+        // Load cached cases from localStorage
+        function loadCachedCases() {
+            try {
+                const cachedCases = localStorage.getItem('medsimulation_cached_cases');
+                if (cachedCases) {
+                    const cases = JSON.parse(cachedCases);
+                    const list = document.getElementById('cachedList');
+
+                    if (cases.length > 0) {
+                        list.innerHTML = cases.slice(0, 5).map(c =>
+                            `<li>${escapeHtml(c.title || c.case_id)}</li>`
+                        ).join('');
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load cached cases:', e);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Listen for online/offline events
+        window.addEventListener('online', updateStatus);
+        window.addEventListener('offline', updateStatus);
+
+        // Initial check
+        updateStatus();
+        loadCachedCases();
+    </script>
+</body>
+</html>

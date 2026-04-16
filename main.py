@@ -8,10 +8,12 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -125,6 +127,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Enable CORS for web app (React Native Web runs on different port)
+# In development, allow all origins. In production, restrict to specific domains.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Dev mode - restrict in production
+    allow_credentials=False,  # Must be False when using wildcard origins
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Mount static files
 static_path = Path(__file__).parent / "static"
 static_path.mkdir(exist_ok=True)
@@ -155,6 +167,12 @@ async def root(request: Request):
 async def simulation_page(request: Request):
     """Clinical simulation lab for resident training."""
     return templates.TemplateResponse("simulation.html", {"request": request})
+
+
+@app.get("/offline", response_class=HTMLResponse)
+async def offline_page(request: Request):
+    """Offline fallback page for PWA."""
+    return templates.TemplateResponse("offline.html", {"request": request})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -505,13 +523,13 @@ async def api_generate_case(payload: dict):
     if vllm_client is None:
         raise HTTPException(status_code=503, detail="vLLM not connected")
 
-    mode = os.getenv("VLLM_MODE", "simulated")
-    status = "approved" if mode == "local" else "pending"
+    # User-generated cases are auto-approved so they appear immediately in recommendations
+    status = "approved"
 
     try:
         case_data = None
-        
-        # 1. EndlessMedical
+
+        # 1. EndlessMedical - diagnostic disease database
         if source == "endless_medical" or source == "auto":
             try:
                 case_data = await build_case_from_disease(topic, vllm_client)
@@ -519,8 +537,8 @@ async def api_generate_case(payload: dict):
                 logger.warning("EndlessMedical failed: %s", e)
                 if source == "endless_medical":
                     raise
-                
-        # 2. PubMed
+
+        # 2. PubMed - peer-reviewed case reports
         if not case_data and (source == "pubmed" or source == "auto"):
             try:
                 pmids = await search_pubmed_cases(topic, max_results=1)
@@ -533,7 +551,7 @@ async def api_generate_case(payload: dict):
                 if source == "pubmed":
                     raise
 
-        # 3. Wiley
+        # 3. Wiley - clinical case reports from Wiley Open Access
         if not case_data and (source == "wiley" or source == "auto"):
             try:
                 articles = await search_wiley_cases(query=topic, max_results=1)
@@ -561,10 +579,54 @@ async def api_generate_case(payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Specific routes MUST come before generic {case_id} routes ─────────────────
+
+@app.get("/api/cases/recommended")
+async def api_get_recommended_cases(limit: int = 6):
+    """
+    Phase F: Fetch cases recommended by the Thompson Sampling Bandit.
+    Balances exploration and exploitation based on historical engagement.
+    """
+    cases = get_recommended_cases(limit=limit)
+    return JSONResponse(content=cases)
+
+
 @app.get("/api/cases/pending")
 async def api_pending_cases():
     """Admin: list cases pending review."""
     return JSONResponse(content=get_pending_cases())
+
+
+@app.get("/api/cases/db")
+async def api_list_db_cases(source: str | None = None, status: str | None = None):
+    """List all cases in the database with optional filters."""
+    return JSONResponse(content=list_db_cases(source=source, status=status))
+
+
+@app.get("/api/cases/{case_id}")
+async def api_get_case(case_id: str):
+    """Get a single case by ID."""
+    from src.simulation.database import _connect
+    import json
+
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT case_id, title, specialty, difficulty, source, case_data FROM cases WHERE case_id = ?",
+            (case_id,)
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    case_data = json.loads(row["case_data"])
+    return JSONResponse(content={
+        "case_id": row["case_id"],
+        "title": row["title"],
+        "specialty": row["specialty"],
+        "difficulty": row["difficulty"],
+        "source": row["source"],
+        **case_data
+    })
 
 
 @app.post("/api/cases/{case_id}/approve")
@@ -583,21 +645,7 @@ async def api_reject_case(case_id: str):
     raise HTTPException(status_code=404, detail="Case not found or not pending")
 
 
-@app.get("/api/cases/db")
-async def api_list_db_cases(source: str | None = None, status: str | None = None):
-    """List all cases in the database with optional filters."""
-    return JSONResponse(content=list_db_cases(source=source, status=status))
-
 # ── Adaptive Learning / Bandit Routes ─────────────────────────────────────────
-
-@app.get("/api/cases/recommended")
-async def api_get_recommended_cases(limit: int = 6):
-    """
-    Phase F: Fetch cases recommended by the Thompson Sampling Bandit.
-    Balances exploration and exploitation based on historical engagement.
-    """
-    cases = get_recommended_cases(limit=limit)
-    return JSONResponse(content=cases)
 
 class EngagementPayload(BaseModel):
     arm_id: str

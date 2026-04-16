@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Development
+.env
+.env.local
+*.log
+
+# Data (will be mounted as volume)
+data/imaging/
+data/medsim.db
+
+# Documentation
+*.md
+!SIMULATION_PROJECT.md
