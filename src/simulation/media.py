@@ -25,12 +25,13 @@ async def generate_patient_portrait(client: AsyncOpenAI, presentation: str, age:
             return ""
             
         prompt = (
-            "A highly professional, photorealistic clinical medical photograph of a patient. "
+            "A highly professional, photorealistic clinical medical photograph of a PATIENT (not a doctor). "
             f"Patient demographics: {age} {sex}. "
             f"Clinical context: {presentation}. "
-            "The image should be a standard chest-up clinical portrait typical of an EMR "
-            "(Electronic Medical Record). High quality, neutral lighting, plain background. "
-            "No text, no UI elements."
+            "The image should be a standard chest-up patient portrait typical of an EMR "
+            "(Electronic Medical Record). The patient should appear in casual everyday clothing, "
+            "NOT in medical scrubs or a white coat. High quality, neutral lighting, plain background. "
+            "No text, no UI elements, no medical staff."
         )
         
         response = await client.images.generate(

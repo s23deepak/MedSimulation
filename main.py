@@ -579,10 +579,54 @@ async def api_generate_case(payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Specific routes MUST come before generic {case_id} routes ─────────────────
+
+@app.get("/api/cases/recommended")
+async def api_get_recommended_cases(limit: int = 6):
+    """
+    Phase F: Fetch cases recommended by the Thompson Sampling Bandit.
+    Balances exploration and exploitation based on historical engagement.
+    """
+    cases = get_recommended_cases(limit=limit)
+    return JSONResponse(content=cases)
+
+
 @app.get("/api/cases/pending")
 async def api_pending_cases():
     """Admin: list cases pending review."""
     return JSONResponse(content=get_pending_cases())
+
+
+@app.get("/api/cases/db")
+async def api_list_db_cases(source: str | None = None, status: str | None = None):
+    """List all cases in the database with optional filters."""
+    return JSONResponse(content=list_db_cases(source=source, status=status))
+
+
+@app.get("/api/cases/{case_id}")
+async def api_get_case(case_id: str):
+    """Get a single case by ID."""
+    from src.simulation.database import _connect
+    import json
+
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT case_id, title, specialty, difficulty, source, case_data FROM cases WHERE case_id = ?",
+            (case_id,)
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    case_data = json.loads(row["case_data"])
+    return JSONResponse(content={
+        "case_id": row["case_id"],
+        "title": row["title"],
+        "specialty": row["specialty"],
+        "difficulty": row["difficulty"],
+        "source": row["source"],
+        **case_data
+    })
 
 
 @app.post("/api/cases/{case_id}/approve")
@@ -601,21 +645,7 @@ async def api_reject_case(case_id: str):
     raise HTTPException(status_code=404, detail="Case not found or not pending")
 
 
-@app.get("/api/cases/db")
-async def api_list_db_cases(source: str | None = None, status: str | None = None):
-    """List all cases in the database with optional filters."""
-    return JSONResponse(content=list_db_cases(source=source, status=status))
-
 # ── Adaptive Learning / Bandit Routes ─────────────────────────────────────────
-
-@app.get("/api/cases/recommended")
-async def api_get_recommended_cases(limit: int = 6):
-    """
-    Phase F: Fetch cases recommended by the Thompson Sampling Bandit.
-    Balances exploration and exploitation based on historical engagement.
-    """
-    cases = get_recommended_cases(limit=limit)
-    return JSONResponse(content=cases)
 
 class EngagementPayload(BaseModel):
     arm_id: str

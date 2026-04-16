@@ -20,8 +20,7 @@ Never run out of cases to practice. MedSimulation features a robust ingestion pi
 - **AgentClinic Format:** Imports pre-structured AI multi-agent medical evaluation benchmarks.
 - **Free-text AI Generation:** Generates bespoke clinical cases from a single symptom or scenario prompt.
 
-### 🖼️ Generative Patient Media
-- **Photorealistic Portraits**: DALL-E 3 generates highly realistic patient portraits matching the clinical presentation upon case creation. Viewable in the Physical Exam tab.
+### 🎙️ Patient Voice
 - **Conversational Text-to-Speech**: Integrated OpenAI TTS-1 automatically voices the patient's dialogue out loud during history taking, adapting the voice (`alloy` or `nova`) based on the patient's demographics.
 
 ### 🧠 Adaptive Learning & Engagement
@@ -300,7 +299,7 @@ MedSimulation/
 ### UX & Clinical Realism
 - **Lab/Imaging results for newly ordered tests**: When a resident orders a test not pre-loaded in the case (e.g. selecting a CBC mid-simulation), the UI currently returns "no result available." The system should dynamically generate plausible, case-consistent results for any ordered test rather than surfacing a dead-end.
 - **Speech-to-text input for doctors**: Typing is not natural for clinicians during a simulated encounter. Integrate Whisper (local) or OpenAI Whisper API so residents can speak their questions/orders and have them transcribed into the input field. This is especially important for hands-free workflow and realism.
-- **Text-to-speech for patient responses**: Displaying the patient's reply as readable text lets residents re-read it indefinitely, which is unrealistic. Convert patient dialogue to audio (OpenAI TTS-1 or equivalent) so the resident must listen attentively — mirroring a real clinical encounter. Text display should be suppressed or delayed.
+- ~~**Text-to-speech for patient responses**~~: Implemented — OpenAI TTS-1 voices patient dialogue during history taking with gender-appropriate voices (`alloy` for male, `nova` for female).
 
 ### Scoring & Quality Metrics
 - **Patient satisfaction score**: Track and penalise repetitive or unnecessary questions during history taking. Frequent redundant queries lower the simulated patient's satisfaction score — surfaced in the debrief as a proxy for bedside manner and efficiency. This score directly affects the hospital's simulated quality metrics.
@@ -335,6 +334,26 @@ MedSimulation/
 ### Lower Lift
 
 - **Multi-Agent Scoring Panel**: Runs 3 specialist agents in parallel instead of a single senior clinician call — a Clinician agent (medical accuracy), a Teacher agent (reasoning order: history before exam before diagnosis), and a Patient Safety agent (flags dangerous omissions such as missed sepsis workup or delayed imaging). Scores are aggregated for the final result.
+
+## 📱 Mobile App (MedSimulation-App)
+
+A React Native mobile application providing on-the-go clinical simulation training.
+
+**Features:**
+- Full case library access with difficulty-based color coding
+- AI-powered case generation from any medical topic
+- Auto-open simulation after generation
+- Touch-optimized clinical assessment workflow
+- Offline-capable case caching
+- Visual "NEW" indicator for generated cases
+
+**Documentation:**
+- [`README.md`](../MedSimulation-App/README.md) - Full mobile app documentation
+- [`UX_DECISIONS.md`](../MedSimulation-App/UX_DECISIONS.md) - Design decisions and future enhancements
+
+**Tech Stack:** React Native + Expo, TypeScript, WatermelonDB, Zustand
+
+---
 
 ## License
 MIT License
