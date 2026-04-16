@@ -153,15 +153,18 @@ Deploy the entire application (frontend + backend + LLM) to Modal with a single 
 ### Quick Deploy
 
 ```bash
-# 1. Install Modal CLI
-pip install modal
+# 1. Install Modal in your venv
+uv add modal
 
 # 2. Authenticate (first time only)
-modal setup
+python -m modal setup
+# Follow the browser link to authenticate
 
-# 3. Configure your deployment
-cp .env.modal.example .env.modal
-# Edit .env.modal to add your API keys (OpenAI for TTS, etc.)
+# 3. Create Modal secrets for HuggingFace (required for MedGemma)
+# Get token at: https://huggingface.co/settings/tokens
+modal secret create medsimulation-secrets \
+    HF_TOKEN=hf_your_token_here \
+    OPENAI_API_KEY=sk_your_key_here
 
 # 4. Deploy!
 modal deploy modal_app.py

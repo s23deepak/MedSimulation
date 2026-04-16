@@ -88,7 +88,10 @@ image_cpu = (
     allow_concurrent_inputs=50,
     volumes={"/data": data_volume},
     image=image,
-    secrets=[Secret.from_dotenv(".env.modal", required=False)],
+    secrets=[
+        Secret.from_name("medsimulation-secrets", required=False),
+        Secret.from_dotenv(".env.modal", required=False),
+    ],
 )
 @modal.asgi_app()
 def serve():
@@ -141,7 +144,7 @@ def serve():
 
     # ── Wait for vLLM to be ready ──────────────────────────────────────────────
 
-    def wait_for_vllm(timeout=120):
+    def wait_for_vllm(timeout=180):
         """Wait until vLLM is responding to health checks."""
         start = time.time()
         while time.time() - start < timeout:
@@ -208,7 +211,10 @@ def serve():
     allow_concurrent_inputs=50,
     volumes={"/data": data_volume},
     image=image_cpu,
-    secrets=[Secret.from_dotenv(".env.modal", required=False)],
+    secrets=[
+        Secret.from_name("medsimulation-secrets", required=False),
+        Secret.from_dotenv(".env.modal", required=False),
+    ],
 )
 @modal.asgi_app()
 def serve_cpu():

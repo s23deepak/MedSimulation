@@ -1,5 +1,9 @@
 # Environments
+# Ignore actual env files, but keep templates (.env.example)
 .env
+.env.local
+.env.*.local
+.env.modal
 .venv/
 venv/
 env/

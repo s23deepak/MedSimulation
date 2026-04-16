@@ -26,6 +26,9 @@ _DEFAULT_LOCAL_URL = "http://localhost:8001/v1"
 _DEFAULT_LOCAL_MODEL = "google/medgemma-4b-it"
 _DEFAULT_CLOUD_MODEL = "google/medgemma-27b-it"
 
+# Debug flag for logging full payloads (off by default - potential data exposure)
+_DEBUG_LOG_PAYLOAD = os.getenv("DEBUG_LOG_PAYLOAD", "").lower() in ("true", "1", "yes")
+
 
 class VLLMClient:
     """
@@ -119,7 +122,10 @@ class VLLMClient:
         }
         logger.info("vLLM request: url=%s, model=%s, messages_count=%d, max_tokens=%d",
                    self.base_url, self.model, len(messages), max_tokens)
-        logger.debug("vLLM payload: %s", payload)
+        if _DEBUG_LOG_PAYLOAD:
+            logger.debug("vLLM payload: %s", payload)
+        else:
+            logger.debug("vLLM payload: [redacted - set DEBUG_LOG_PAYLOAD=1 to log]")
         async with httpx.AsyncClient(timeout=timeout or self.timeout) as client:
             try:
                 response = await client.post(

@@ -7,10 +7,13 @@ const CACHE_NAME = 'medsimulation-v1';
 const STATIC_CACHE = 'medsimulation-static-v1';
 const API_CACHE = 'medsimulation-api-v1';
 
+// Cache version for busting - increment when static assets change
+const CACHE_VERSION = 'v3';
+
 // Resources to cache immediately on install
 const STATIC_ASSETS = [
   '/',
-  '/static/styles.css',
+  '/static/styles.css?' + CACHE_VERSION,
   '/static/favicon.svg',
   '/static/manifest.json',
   '/offline',
@@ -75,6 +78,16 @@ self.addEventListener('activate', (event) => {
 // Fetch Event - Network first with cache fallback
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Normalize URL for cache matching - strip version query strings
+function normalizeUrl(url) {
+  const parsed = new URL(url);
+  // Remove cache-busting query strings like ?v=3
+  if (parsed.searchParams.has('v')) {
+    parsed.searchParams.delete('v');
+  }
+  return parsed.toString();
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -96,15 +109,23 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Static assets - cache first with network fallback
-  event.respondWith(cacheFirstStrategy(request));
+  event.respondWith(cacheFirstStrategy(request, event));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Cache First Strategy (for static assets)
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function cacheFirstStrategy(request) {
-  const cachedResponse = await caches.match(request);
+async function cacheFirstStrategy(request, event) {
+  // Try exact match first, then normalized URL (for versioned assets)
+  let cachedResponse = await caches.match(request);
+
+  if (!cachedResponse) {
+    const normalizedUrl = normalizeUrl(request.url);
+    if (normalizedUrl !== request.url) {
+      cachedResponse = await caches.match(normalizedUrl);
+    }
+  }
 
   if (cachedResponse) {
     // Return cached version, but update cache in background
@@ -197,8 +218,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'MedSimulation';
   const options = {
     body: data.body || 'New notification',
-    icon: '/static/icon-192.png',
-    badge: '/static/icon-192.png',
+    icon: '/static/icon-192.svg',
+    badge: '/static/icon-192.svg',
     vibrate: [200, 100, 200],
     data: data.url || '/',
   };

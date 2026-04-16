@@ -26,6 +26,11 @@ gpu = [
     "vllm>=0.6",
 ]
 
+# Install with: uv sync --extra modal
+modal = [
+    "modal>=0.60.0",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
