@@ -30,10 +30,7 @@ from modal import App, Image, Volume, Secret
 # subsequent boots restore in ~5-10 s instead of ~5 min.
 # If your Modal tier/region does not support this yet, Modal will simply ignore
 # the flag and fall back to a normal cold start — it is safe to leave enabled.
-app = App(
-    "medsimulation",
-    experimental_options={"enable_gpu_snapshot": True},
-)
+app = App("medsimulation")
 
 # ── Volumes ─────────────────────────────────────────────────────────────────────
 
@@ -144,6 +141,7 @@ def download_model(model_id: str = "google/medgemma-4b-it"):
     image=image,
     scaledown_window=300,  # Shut down after 5 min idle
     timeout=600,
+    enable_memory_snapshot=True,   # Required for snap=True in @modal.enter
     volumes={
         "/data": data_volume,
         "/models": model_volume,
@@ -152,9 +150,8 @@ def download_model(model_id: str = "google/medgemma-4b-it"):
         Secret.from_name("medsimulation-secrets"),
         Secret.from_dotenv(".env.modal"),
     ],
-    # Allow multiple concurrent requests on one container
-    allow_concurrent_inputs=50,
 )
+@modal.concurrent(max_inputs=50)
 class VLLMService:
     """
     In-process vLLM AsyncLLMEngine running as a Modal class.
@@ -258,9 +255,10 @@ def serve():
     """
     All-in-one MedSimulation server.
 
-    vLLM now runs inside VLLMService (above) — no subprocess needed.
-    The FastAPI backend proxies LLM requests to VLLMService via Modal RPC.
-    Cold starts are fast because VLLMService restores from GPU snapshot.
+    vLLM runs inside VLLMService (above) — no subprocess needed.
+    We inject a ModalVLLMClient into vllm_client._injected_client BEFORE
+    importing main.py so that VLLMClient.from_env() picks it up automatically
+    when VLLM_MODE=modal.
     """
     import os
     import sys
@@ -268,16 +266,13 @@ def serve():
     from pathlib import Path
 
     logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger("modal_app")
 
-    # ── Point backend at VLLMService openai-compat endpoint ────────────────────
-    # vLLM is no longer a subprocess; we communicate through Modal's RPC.
-    # If you need OpenAI-compatible HTTP (e.g. the main.py uses the openai SDK),
-    # set VLLM_MODE=modal so main.py calls VLLMService.generate.remote() directly.
-    # Alternatively, keep VLLM_MODE=local and start a lightweight proxy — see
-    # modal_vllm.py for the standalone server approach.
-    os.environ.setdefault("VLLM_MODE", "modal")
-    os.environ.setdefault("VLLM_MODEL", os.getenv("VLLM_MODEL", "google/medgemma-4b-it"))
+    # ── Set env vars before any src imports ────────────────────────────────────
+    os.environ["VLLM_MODE"] = "modal"
+    os.environ["VLLM_MODEL"] = os.getenv("VLLM_MODEL", "google/medgemma-4b-it")
+    # Use the correct env var name and correct filename
+    os.environ["DATABASE_PATH"] = "/data/medsim.db"
     os.environ["DATA_DIR"] = "/data"
 
     # ── Source tree setup ───────────────────────────────────────────────────────
@@ -290,12 +285,25 @@ def serve():
     (app_dir / "data" / "imaging").mkdir(exist_ok=True)
     (app_dir / "data" / "imaging" / "dicom").mkdir(exist_ok=True)
 
+    # ── Inject Modal-native vLLM client ────────────────────────────────────────
+    # This must happen BEFORE importing main so from_env() sees the injected client.
+    import src.simulation.vllm_client as _vc
+    from src.simulation.vllm_client import ModalVLLMClient
+
+    _svc = VLLMService()   # Modal class handle — lightweight, no model loaded here
+    _vc._injected_client = ModalVLLMClient(
+        vllm_service_instance=_svc,
+        model=os.environ["VLLM_MODEL"],
+    )
+    logger.info("ModalVLLMClient injected — vLLM will route via Modal RPC to VLLMService")
+
     from main import app as backend_app
 
     logger.info("MedSimulation backend ready")
     logger.info("Access at: https://<workspace>--medsimulation-serve.modal.run")
 
     return backend_app
+
 
 
 # ── Alternative: CPU-Only Deployment (cloud LLM provider) ──────────────────────

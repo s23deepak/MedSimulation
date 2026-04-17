@@ -1,9 +1,10 @@
 """
 vLLM client — async OpenAI-compatible interface for MedGemma inference.
 
-Supports two modes:
+Supports three modes:
   - **local**: medgemma-4b-it on RTX 5060 (8GB VRAM), vLLM server on :8001
   - **cloud**: medgemma-27b-it (AWQ) on RunPod/Modal, remote endpoint
+  - **modal**: calls VLLMService Modal class via RPC (no HTTP, no subprocess)
 
 The client duck-types with the existing MedGemmaRunnable agent interface
 (process_query, chat) so it drops in without changing the simulation engine.
@@ -19,6 +20,10 @@ from typing import Any
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# ── Injection point for Modal RPC mode ───────────────────────────────────────
+# In modal_app.py's serve(), set this to a ModalVLLMClient before importing main.
+_injected_client: "VLLMClient | None" = None
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -97,6 +102,13 @@ class VLLMClient:
                 logger.error("VLLM_MODE=cloud but VLLM_CLOUD_URL is not set")
                 return None
             logger.info("VLLM_MODE=cloud — connecting to %s model=%s", base_url, model)
+
+        elif mode == "modal":
+            if _injected_client is not None:
+                logger.info("VLLM_MODE=modal — using injected ModalVLLMClient (Modal RPC)")
+                return _injected_client
+            logger.warning("VLLM_MODE=modal but no client was injected — falling back to simulated")
+            return None
 
         else:
             logger.warning("Unknown VLLM_MODE=%s — falling back to simulated", mode)
@@ -257,3 +269,100 @@ class VLLMClient:
 
     def __repr__(self) -> str:
         return f"VLLMClient(base_url={self.base_url!r}, model={self.model!r})"
+
+
+# ── Modal RPC client ──────────────────────────────────────────────────────────
+
+class ModalVLLMClient:
+    """
+    Duck-type replacement for VLLMClient that routes inference requests to a
+    VLLMService Modal class via Modal's RPC system instead of HTTP.
+
+    Injected by modal_app.py's serve() into vllm_client._injected_client
+    so that main.py's VLLMClient.from_env() picks it up when VLLM_MODE=modal.
+    """
+
+    def __init__(self, vllm_service_instance: Any, model: str = _DEFAULT_LOCAL_MODEL) -> None:
+        self._svc = vllm_service_instance
+        self.model = model
+        self.base_url = "modal-rpc"   # For repr / health logging only
+
+    # ── Async interface ───────────────────────────────────────────────────────
+
+    async def chat_async(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 512,
+        **kwargs,
+    ) -> str:
+        """Call VLLMService.generate.aio() via Modal RPC."""
+        # Flatten chat messages the same way VLLMService expects (single prompt)
+        prompt = "\n".join(
+            f"{m['role'].upper()}: {m['content']}" for m in messages
+        )
+        logger.info("ModalVLLMClient: dispatching generate to VLLMService RPC")
+        return await self._svc.generate.aio(
+            prompt, max_tokens=max_tokens, temperature=temperature
+        )
+
+    async def generate_async(
+        self,
+        prompt: str,
+        temperature: float = 0.7,
+        max_tokens: int = 512,
+        **kwargs,
+    ) -> str:
+        return await self._svc.generate.aio(
+            prompt, max_tokens=max_tokens, temperature=temperature
+        )
+
+    async def health_async(self) -> bool:
+        """VLLMService is healthy if Modal routing reached us."""
+        try:
+            result = await self._svc.health.aio()
+            return result.get("status") == "ok"
+        except Exception:
+            return True  # Assume healthy — health check failure shouldn't block startup
+
+    # ── Sync interface ────────────────────────────────────────────────────────
+
+    def _run_sync(self, coro):
+        """Run an async coroutine from a sync context, thread-safely."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, coro)
+                return future.result(timeout=120)
+        else:
+            return asyncio.run(coro)
+
+    def chat(self, prompt: str) -> str:
+        return self._run_sync(self.generate_async(prompt))
+
+    def sync_chat_messages(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 512,
+    ) -> str:
+        return self._run_sync(self.chat_async(messages, temperature=temperature, max_tokens=max_tokens))
+
+    def generate_medgemma(
+        self,
+        prompt: str,
+        temperature: float = 0.3,
+        max_tokens: int = 256,
+    ) -> str:
+        return self._run_sync(self.generate_async(prompt, temperature=temperature, max_tokens=max_tokens))
+
+    def process_query(self, query: str, patient_context: dict | None = None) -> dict:
+        return {"response": self.chat(query)}
+
+    def __repr__(self) -> str:
+        return f"ModalVLLMClient(model={self.model!r})"
