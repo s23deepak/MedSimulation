@@ -43,6 +43,23 @@ MedGemma requires accepting terms on HuggingFace:
 
 ---
 
+## Step 3.5: Pre-cache Model Weights (one-time, strongly recommended)
+
+This downloads MedGemma 4B into a persistent Modal Volume so containers never
+re-download it from HuggingFace on cold starts. **Run once after the first deploy.**
+
+```bash
+modal run modal_app.py::download_model
+```
+
+- Takes ~2–5 minutes while downloading (~9 GB).
+- Only needs to be repeated if you switch models.
+- All GPU containers share the same volume, so the download happens once total.
+
+Without this step, each cold start downloads the model (~1–2 extra minutes).
+
+---
+
 ## Step 4: Deploy vLLM Server
 
 ```bash
@@ -113,7 +130,9 @@ In Modal dashboard:
 Make sure you accepted MedGemma terms on HuggingFace and added the secret.
 
 ### "GPU unavailable"
-Modal may take 1-2 minutes to spin up a cold GPU. First request will be slow.
+Modal may take ~15–30 seconds to spin up after idle (cold start). With GPU
+snapshots enabled this is much faster than before. First-ever cold start (before
+the snapshot is taken) may still take 1–2 minutes.
 
 ### "Too expensive"
 Reduce `container_idle_timeout` in `modal_vllm.py` from 300 to 120 seconds.

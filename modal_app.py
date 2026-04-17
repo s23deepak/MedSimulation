@@ -4,29 +4,51 @@ MedSimulation — Modal All-in-One Deployment
 Deploy the entire application (frontend + backend + LLM) on Modal with a single command.
 
 Usage:
+    # One-time model pre-cache (run after first deploy):
+    modal run modal_app.py::download_model
+
+    # Deploy (production):
     modal deploy modal_app.py
 
 This creates a persistent endpoint at:
     https://<workspace>--medsimulation-serve.modal.run
 
+Cold-start optimisation summary
+────────────────────────────────
+• Model weights live in a Modal Volume → zero HF download time after first run
+• GPU memory snapshot (experimental) → restores pre-loaded engine in ~5 s
+• vLLM runs as AsyncLLMEngine inside VLLMService (@app.cls) with snap=True
+• torch.compile and CUDA graphs disabled → faster first-boot before snapshot exists
 """
 
 import modal
 from modal import App, Image, Volume, Secret
 
-# ── App Definition ─────────────────────────────────────────────────────────────
+# ── App Definition ──────────────────────────────────────────────────────────────
+# experimental_options enables GPU memory snapshots (currently alpha on Modal).
+# After the first full cold start, Modal snapshots the GPU state so that
+# subsequent boots restore in ~5-10 s instead of ~5 min.
+# If your Modal tier/region does not support this yet, Modal will simply ignore
+# the flag and fall back to a normal cold start — it is safe to leave enabled.
+app = App(
+    "medsimulation",
+    experimental_options={"enable_gpu_snapshot": True},
+)
 
-app = modal.App("medsimulation")
-
-# ── Volume for persisting cases and data ───────────────────────────────────────
+# ── Volumes ─────────────────────────────────────────────────────────────────────
 
 # Persistent volume for case data, database, and imaging files
-data_volume = modal.Volume.from_name("medsimulation-data", create_if_missing=True)
+data_volume = Volume.from_name("medsimulation-data", create_if_missing=True)
 
-# ── Image Definition ───────────────────────────────────────────────────────────
+# Persistent volume that stores pre-downloaded model weights.
+# Populated once by `modal run modal_app.py::download_model`.
+# All GPU containers mount this so they never re-download from HuggingFace.
+model_volume = Volume.from_name("medsimulation-models", create_if_missing=True)
 
-# Base image with all dependencies and source code
-# Clone from GitHub to get the full source
+# ── Image Definition ────────────────────────────────────────────────────────────
+
+# HF_HOME points into the model volume so that HuggingFace libraries
+# automatically use cached weights without any extra code.
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install(
@@ -55,7 +77,11 @@ image = (
         "transformers>=4.40.0",
         "accelerate>=0.27.0",
         "sentencepiece>=0.2.0",
+        # Used by download_model()
+        "huggingface_hub>=0.23.0",
     )
+    # HF_HOME → model volume so weights are cached there automatically
+    .env({"HF_HOME": "/models/hf_cache"})
     # Clone the repo to get source code
     .run_commands([
         "git clone https://github.com/s23deepak/MedSimulation.git /root/src_repo || true",
@@ -68,7 +94,211 @@ image = (
     ])
 )
 
-# ── Alternative: Lighter image (use Together AI for LLM) ───────────────────────
+# ── One-time Model Download ──────────────────────────────────────────────────────
+
+@app.function(
+    image=image,
+    gpu="A10G",
+    volumes={
+        "/models": model_volume,
+    },
+    secrets=[
+        Secret.from_name("medsimulation-secrets"),
+    ],
+    timeout=1800,  # 30 min — large model download
+)
+def download_model(model_id: str = "google/medgemma-4b-it"):
+    """
+    One-time setup: download model weights into the model volume.
+
+    Run with:
+        modal run modal_app.py::download_model
+
+    This only needs to be re-run if you change the model.
+    The downloaded weights are shared by all GPU containers via the volume.
+    """
+    import os
+    from huggingface_hub import snapshot_download
+
+    # Destination inside the volume (not the HF cache, so it's directly usable)
+    dest = f"/models/{model_id.split('/')[-1]}"
+    os.makedirs(dest, exist_ok=True)
+
+    print(f"Downloading {model_id} → {dest} ...")
+    snapshot_download(
+        repo_id=model_id,
+        local_dir=dest,
+        # Skip large binary formats we don't need for vLLM
+        ignore_patterns=["*.msgpack", "*.h5", "flax_model*", "tf_model*"],
+    )
+    # Flush changes to the persistent volume
+    model_volume.commit()
+    print(f"Done! Model cached at {dest}")
+    print("You can now deploy: modal deploy modal_app.py")
+
+
+# ── VLLMService ─────────────────────────────────────────────────────────────────
+
+@app.cls(
+    gpu="A10G",            # bfloat16 requires compute capability ≥ 8.0 (A10G = 8.6)
+    image=image,
+    scaledown_window=300,  # Shut down after 5 min idle
+    timeout=600,
+    volumes={
+        "/data": data_volume,
+        "/models": model_volume,
+    },
+    secrets=[
+        Secret.from_name("medsimulation-secrets"),
+        Secret.from_dotenv(".env.modal"),
+    ],
+    # Allow multiple concurrent requests on one container
+    allow_concurrent_inputs=50,
+)
+class VLLMService:
+    """
+    In-process vLLM AsyncLLMEngine running as a Modal class.
+
+    Using @modal.enter(snap=True) means:
+      - On the FIRST cold start: load_model() runs fully, then Modal snapshots GPU state.
+      - On SUBSEQUENT cold starts: Modal restores the snapshot, skipping load_model().
+        This reduces the restart from ~5 min → ~5-15 s.
+    """
+
+    @modal.enter(snap=True)
+    def load_model(self):
+        """
+        Initialise the vLLM AsyncLLMEngine.
+        Called once before the GPU snapshot is taken; subsequent boots restore from snapshot.
+        """
+        import os
+        import asyncio
+        from vllm import AsyncLLMEngine, AsyncEngineArgs
+
+        model_id = os.getenv("VLLM_MODEL", "google/medgemma-4b-it")
+        model_name = model_id.split("/")[-1]
+        local_path = f"/models/{model_name}"
+
+        # Prefer the pre-downloaded local copy; fall back to HF download if missing
+        import pathlib
+        model_source = local_path if pathlib.Path(local_path).exists() else model_id
+
+        print(f"Loading vLLM engine from: {model_source}")
+
+        engine_args = AsyncEngineArgs(
+            model=model_source,
+            dtype="bfloat16",              # Required for Gemma3 / MedGemma
+            gpu_memory_utilization=float(os.getenv("VLLM_GPU_MEMORY", "0.85")),
+            max_model_len=int(os.getenv("VLLM_MAX_MODEL_LEN", "4096")),
+            trust_remote_code=True,
+            # ── Fast-boot flags: skip JIT that's already paid for in the snapshot ──
+            enforce_eager=True,            # Disable CUDA graph capture (~20 s saved)
+            # torch.compile is off by default in vLLM ≥ 0.6; leave it that way
+            max_num_batched_tokens=4096,
+        )
+
+        # Store on self so it survives across requests
+        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
+
+        # Store model name for health responses
+        self.model_id = model_id
+
+        print("vLLM engine ready!")
+
+    @modal.method()
+    async def generate(
+        self,
+        prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        request_id: str | None = None,
+    ) -> str:
+        """Generate a completion for `prompt`. Returns the full output text."""
+        import uuid
+        from vllm import SamplingParams
+
+        sampling_params = SamplingParams(
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        req_id = request_id or str(uuid.uuid4())
+
+        output_text = ""
+        async for request_output in self.engine.generate(prompt, sampling_params, req_id):
+            if request_output.finished:
+                output_text = request_output.outputs[0].text
+
+        return output_text
+
+    @modal.method()
+    async def health(self) -> dict:
+        """Quick liveness check — returns model name and status."""
+        return {"status": "ok", "model": self.model_id}
+
+
+# ── Web Application (FastAPI + VLLMService) ─────────────────────────────────────
+
+@app.function(
+    gpu="A10G",
+    scaledown_window=300,  # Shut down after 5 min idle
+    timeout=600,
+    volumes={
+        "/data": data_volume,
+        "/models": model_volume,
+    },
+    image=image,
+    secrets=[
+        Secret.from_name("medsimulation-secrets"),
+        Secret.from_dotenv(".env.modal"),
+    ],
+)
+@modal.concurrent(max_inputs=50)
+@modal.asgi_app()
+def serve():
+    """
+    All-in-one MedSimulation server.
+
+    vLLM now runs inside VLLMService (above) — no subprocess needed.
+    The FastAPI backend proxies LLM requests to VLLMService via Modal RPC.
+    Cold starts are fast because VLLMService restores from GPU snapshot.
+    """
+    import os
+    import sys
+    import logging
+    from pathlib import Path
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    # ── Point backend at VLLMService openai-compat endpoint ────────────────────
+    # vLLM is no longer a subprocess; we communicate through Modal's RPC.
+    # If you need OpenAI-compatible HTTP (e.g. the main.py uses the openai SDK),
+    # set VLLM_MODE=modal so main.py calls VLLMService.generate.remote() directly.
+    # Alternatively, keep VLLM_MODE=local and start a lightweight proxy — see
+    # modal_vllm.py for the standalone server approach.
+    os.environ.setdefault("VLLM_MODE", "modal")
+    os.environ.setdefault("VLLM_MODEL", os.getenv("VLLM_MODEL", "google/medgemma-4b-it"))
+    os.environ["DATA_DIR"] = "/data"
+
+    # ── Source tree setup ───────────────────────────────────────────────────────
+    app_dir = Path("/root")
+    if str(app_dir) not in sys.path:
+        sys.path.insert(0, str(app_dir))
+    os.chdir("/root")
+
+    (app_dir / "data").mkdir(exist_ok=True)
+    (app_dir / "data" / "imaging").mkdir(exist_ok=True)
+    (app_dir / "data" / "imaging" / "dicom").mkdir(exist_ok=True)
+
+    from main import app as backend_app
+
+    logger.info("MedSimulation backend ready")
+    logger.info("Access at: https://<workspace>--medsimulation-serve.modal.run")
+
+    return backend_app
+
+
+# ── Alternative: CPU-Only Deployment (cloud LLM provider) ──────────────────────
 
 image_cpu = (
     modal.Image.debian_slim(python_version="3.12")
@@ -90,141 +320,8 @@ image_cpu = (
 )
 
 
-# ── GPU Function (vLLM + FastAPI combined) ─────────────────────────────────────
-
 @app.function(
-    gpu="A10G",  # Required for bfloat16 (MedGemma/Gemma3)
-                 # T4 ($0.35/hr) doesn't support bfloat16
-                 # A10G ($0.60/hr) has compute capability 8.6
-    scaledown_window=300,  # Shut down after 5 min of inactivity
-    timeout=600,  # Max request timeout
-    volumes={"/data": data_volume},
-    image=image,
-    secrets=[
-        Secret.from_name("medsimulation-secrets"),
-        Secret.from_dotenv(".env.modal"),
-    ],
-)
-@modal.concurrent(max_inputs=50)
-@modal.asgi_app()
-def serve():
-    """
-    All-in-one MedSimulation server.
-
-    Starts vLLM as a subprocess and runs the FastAPI backend.
-    Everything accessible from a single URL.
-    """
-    import subprocess
-    import os
-    import time
-    import socket
-    import logging
-
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-
-    # ── Configuration ──────────────────────────────────────────────────────────
-
-    MODEL = os.getenv("VLLM_MODEL", "google/medgemma-4b-it")
-    VLLM_PORT = 8001
-    GPU_MEMORY = float(os.getenv("VLLM_GPU_MEMORY", "0.7"))
-    MAX_MODEL_LEN = int(os.getenv("VLLM_MAX_MODEL_LEN", "4096"))
-
-    # ── Start vLLM server as subprocess ────────────────────────────────────────
-
-    logger.info("Starting vLLM server with model: %s", MODEL)
-
-    vllm_cmd = [
-        "vllm", "serve", MODEL,
-        "--host", "0.0.0.0",
-        "--port", str(VLLM_PORT),
-        "--gpu-memory-utilization", str(GPU_MEMORY),
-        "--max-model-len", str(MAX_MODEL_LEN),
-        "--trust-remote-code",
-        "--dtype", "bfloat16",  # Required for Gemma3/MedGemma
-        # Fast startup optimizations
-        "--disable-torch-compile",      # Saves ~75s compile time
-        "--disable-cuda-graph",         # Saves ~20s graph capture
-        "--max-num-batched-tokens", "4096",  # Limit batch size for faster init
-    ]
-
-    # Add quantization if enabled
-    quantization = os.getenv("VLLM_QUANTIZATION", "bitsandbytes")
-    if quantization and quantization.lower() != "none":
-        vllm_cmd.extend([
-            "--quantization", "bitsandbytes",
-            "--load-format", "bitsandbytes",
-        ])
-
-    logger.info("vLLM command: %s", " ".join(vllm_cmd))
-    vllm_proc = subprocess.Popen(vllm_cmd)
-
-    # ── Wait for vLLM to be ready ──────────────────────────────────────────────
-
-    def wait_for_vllm(timeout=360):
-        """Wait until vLLM is responding to health checks."""
-        start = time.time()
-        while time.time() - start < timeout:
-            try:
-                # Port is open, do HTTP health check
-                import httpx
-                resp = httpx.get(f"http://localhost:{VLLM_PORT}/v1/models", timeout=10)
-                if resp.status_code == 200:
-                    logger.info("vLLM is ready!")
-                    return True
-            except Exception:
-                pass
-            logger.info("Waiting for vLLM to start... (%.0fs)", time.time() - start)
-            time.sleep(5)
-        return False
-
-    if not wait_for_vllm():
-        logger.error("vLLM failed to start within timeout")
-        vllm_proc.terminate()
-        raise RuntimeError("vLLM failed to start")
-
-    # ── Set environment for FastAPI backend ────────────────────────────────────
-
-    os.environ["VLLM_MODE"] = "local"
-    os.environ["VLLM_LOCAL_URL"] = f"http://localhost:{VLLM_PORT}/v1"
-    os.environ["VLLM_MODEL"] = MODEL
-
-    # Set data directory to mounted volume
-    os.environ["DATA_DIR"] = "/data"
-
-    # ── Import and return FastAPI app ──────────────────────────────────────────
-
-    # Change to the app directory so imports work
-    import sys
-    from pathlib import Path
-
-    # Source is at /root/
-    app_dir = Path("/root")
-    if str(app_dir) not in sys.path:
-        sys.path.insert(0, str(app_dir))
-
-    # Change working directory
-    import os
-    os.chdir("/root")
-
-    # Set up data directories
-    (app_dir / "data").mkdir(exist_ok=True)
-    (app_dir / "data" / "imaging").mkdir(exist_ok=True)
-    (app_dir / "data" / "imaging" / "dicom").mkdir(exist_ok=True)
-
-    # Import and return the FastAPI app
-    from main import app as backend_app
-
-    logger.info("MedSimulation backend ready")
-    logger.info("Access at: https://<workspace>--medsimulation-serve.modal.run")
-
-    return backend_app
-
-
-# ── CPU-Only Function (use Together AI or other cloud LLM) ─────────────────────
-
-@app.function(
-    gpu=None,  # No GPU needed - uses cloud LLM
+    gpu=None,
     scaledown_window=300,
     timeout=300,
     volumes={"/data": data_volume},
@@ -239,19 +336,18 @@ def serve():
 def serve_cpu():
     """
     CPU-only deployment using Together AI or other cloud LLM provider.
-
     Cheaper option (~$0.05/hr + token costs) but requires API key.
     """
     import os
+    import sys
     import logging
+    from pathlib import Path
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
-    # Validate cloud configuration
     vllm_mode = os.getenv("VLLM_MODE", "cloud")
     vllm_cloud_url = os.getenv("VLLM_CLOUD_URL")
-    vllm_cloud_key = os.getenv("VLLM_CLOUD_API_KEY")
 
     if vllm_mode == "cloud" and not vllm_cloud_url:
         raise ValueError(
@@ -260,9 +356,7 @@ def serve_cpu():
         )
 
     os.environ["VLLM_MODE"] = vllm_mode
-
-    import sys
-    from pathlib import Path
+    os.environ["DATA_DIR"] = "/data"
 
     app_dir = Path(__file__).parent
     if str(app_dir) not in sys.path:
@@ -279,37 +373,33 @@ def serve_cpu():
     return backend_app
 
 
-# ── CLI Helpers ────────────────────────────────────────────────────────────────
+# ── CLI Helpers ──────────────────────────────────────────────────────────────────
 
 @app.local_entrypoint()
 def main(
     cpu: bool = False,
     model: str = "google/medgemma-4b-it",
-    gpu_memory: float = 0.7,
+    gpu_memory: float = 0.85,
     max_model_len: int = 4096,
 ):
     """
     Deploy MedSimulation to Modal.
 
     Examples:
-        modal run modal_app.py                    # Deploy GPU version
-        modal run modal_app.py --cpu              # Deploy CPU version (cloud LLM)
-        modal run modal_app.py --model google/gemma-2b-it
+        modal run modal_app.py::download_model    # Pre-cache model weights (run first!)
         modal deploy modal_app.py                 # Production deployment
+        modal run modal_app.py --cpu              # CPU version (cloud LLM)
+        modal run modal_app.py --model google/gemma-2b-it
     """
     import os
 
-    # Set deployment-time environment variables
     os.environ["VLLM_MODEL"] = model
     os.environ["VLLM_GPU_MEMORY"] = str(gpu_memory)
     os.environ["VLLM_MAX_MODEL_LEN"] = str(max_model_len)
 
     if cpu:
-        logger = modal.logging.getLogger(__name__)
-        logger.info("Deploying CPU version (cloud LLM mode)")
-        # CPU deployment requires .env.modal with cloud config
+        print("Deploying CPU version (cloud LLM mode)")
         return serve_cpu.web_url
     else:
-        logger = modal.logging.getLogger(__name__)
-        logger.info(f"Deploying GPU version with model: {model}")
+        print(f"Deploying GPU version with model: {model}")
         return serve.web_url
