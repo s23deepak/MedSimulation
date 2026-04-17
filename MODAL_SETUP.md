@@ -43,6 +43,23 @@ MedGemma requires accepting terms on HuggingFace:
 
 ---
 
+## Step 3.5: Pre-cache Model Weights (one-time, strongly recommended)
+
+This downloads MedGemma 4B into a persistent Modal Volume so containers never
+re-download it from HuggingFace on cold starts. **Run once after the first deploy.**
+
+```bash
+modal run modal_app.py::download_model
+```
+
+- Takes ~2–5 minutes while downloading (~9 GB).
+- Only needs to be repeated if you switch models.
+- All GPU containers share the same volume, so the download happens once total.
+
+Without this step, each cold start downloads the model (~1–2 extra minutes).
+
+---
+
 ## Step 4: Deploy vLLM Server
 
 ```bash
@@ -61,13 +78,19 @@ You'll see output like:
 
 ## Step 5: Configure MedSimulation
 
-Update your Railway/Render environment variables:
+Set the following environment variables for your Modal web app deployment (or a `.env` file for local testing):
 
 ```bash
 VLLM_MODE=cloud
 VLLM_CLOUD_URL=https://your-username--medsimulation-vllm-server.modal.run/v1
 VLLM_CLOUD_API_KEY=your-modal-api-key
 VLLM_MODEL=google/medgemma-4b-it
+```
+
+To inject secrets into Modal, use:
+```bash
+modal secret create medsimulation-env \
+  --from-dict '{"VLLM_CLOUD_URL": "...", "VLLM_CLOUD_API_KEY": "ak-xxxxx", "VLLM_MODEL": "google/medgemma-4b-it"}'
 ```
 
 ### Get Modal API Key:
@@ -89,12 +112,19 @@ curl https://your-username--medsimulation-vllm-server.modal.run/v1/models \
 
 ---
 
-## Step 7: Deploy to Railway
+## Step 7: Deploy the Web App to Modal
 
-1. Push code with Modal config
-2. Deploy to Railway
-3. Set environment variables in Railway dashboard
-4. Test a simulation!
+```bash
+modal deploy modal_web.py
+```
+
+You'll see output like:
+```
+✓ Deployed medsimulation-web to prod
+✓ Endpoint: https://your-username--medsimulation-web.modal.run
+```
+
+Open the endpoint URL in your browser and test a simulation!
 
 ---
 
@@ -113,7 +143,9 @@ In Modal dashboard:
 Make sure you accepted MedGemma terms on HuggingFace and added the secret.
 
 ### "GPU unavailable"
-Modal may take 1-2 minutes to spin up a cold GPU. First request will be slow.
+Modal may take ~15–30 seconds to spin up after idle (cold start). With GPU
+snapshots enabled this is much faster than before. First-ever cold start (before
+the snapshot is taken) may still take 1–2 minutes.
 
 ### "Too expensive"
 Reduce `container_idle_timeout` in `modal_vllm.py` from 300 to 120 seconds.
@@ -134,19 +166,19 @@ model = os.getenv("MODEL_NAME", "google/gemma-2-9b-it")  # More available
 ## Summary: Complete Flow
 
 ```
-User on Phone          Railway (Web App)          Modal (GPU)
-     │                        │                        │
-     │  1. Open app           │                        │
-     │───────────────────────>│                        │
-     │                        │                        │
-     │  2. Ask patient        │  3. Forward to vLLM    │
-     │───────────────────────>│───────────────────────>│
-     │                        │                        │
-     │                        │         4. GPU spins up (cold start ~30s)
-     │                        │         5. MedGemma generates response
-     │                        │                        │
-     │  6. Show response      │  7. Return text        │
-     │<───────────────────────│<───────────────────────│
-     │                        │                        │
-     │                        │                        │ 8. Idle 5 min → spin down
+User on Phone        Modal (Web App)            Modal (GPU / vLLM)
+     │                      │                           │
+     │  1. Open app         │                           │
+     │────────────────────->│                           │
+     │                      │                           │
+     │  2. Ask patient      │  3. Forward to vLLM       │
+     │────────────────────->│──────────────────────────>│
+     │                      │                           │
+     │                      │    4. GPU spins up (cold start ~30s)
+     │                      │    5. MedGemma generates response
+     │                      │                           │
+     │  6. Show response    │  7. Return text           │
+     │<────────────────────│<──────────────────────────│
+     │                      │                           │
+     │                      │                           │ 8. Idle → spin down
 ```

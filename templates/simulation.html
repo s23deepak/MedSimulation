@@ -24,19 +24,24 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css?v=3">
+    <link rel="stylesheet" href="/static/styles.css?v=6">
 </head>
 
 <body>
     <header class="app-header" role="banner">
-        <div class="header-left">
-            <a href="/" class="logo" aria-label="MedSimulation home">
-                <span class="logo-icon" aria-hidden="true">&#9877;</span>
-                <span class="logo-text">MedSimulation</span>
-            </a>
-        </div>
-        <div class="nav-user">
-            <span aria-label="Current user">Resident</span>
+        <div class="header-inner">
+            <div class="header-left">
+                <a href="/" class="logo" aria-label="MedSimulation home">
+                    <span class="logo-icon" aria-hidden="true">&#9877;</span>
+                    <span class="logo-text">MedSimulation</span>
+                </a>
+            </div>
+            <div class="nav-right">
+                <a href="#about" class="nav-link">About</a>
+                <div class="nav-user">
+                    <span aria-label="Current user">Resident</span>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -90,8 +95,8 @@
 
                 <form id="searchForm" class="search-form" onsubmit="handleSearch(event)" role="search">
                     <input type="text" id="topicInput" class="search-input"
-                        placeholder="What would you like to practice diagnosing today?"
-                        aria-label="Search topic" required />
+                        placeholder="What would you like to practice diagnosing today?" aria-label="Search topic"
+                        required />
 
                     <select id="sourceSelect" class="source-select" aria-label="Case source">
                         <option value="auto">Auto (Best Available)</option>
@@ -126,6 +131,53 @@
                 </div>
             </div>
 
+            <!-- About Section -->
+            <section id="about" class="about-section">
+                <div class="about-container">
+                    <h2 class="about-title">About MedSimulation</h2>
+                    <p class="about-lead">A high-fidelity AI-powered clinical simulation lab designed for medical
+                        training and competency assessment.</p>
+
+                    <div class="about-features">
+                        <div class="about-card">
+                            <div class="about-icon">💬</div>
+                            <h3>Dynamic History</h3>
+                            <p>Interact with AI-driven patient personas that withheld or reveal clinical clues based on
+                                your interview technique.</p>
+                        </div>
+                        <div class="about-card">
+                            <div class="about-icon">🩺</div>
+                            <h3>Physical Exam</h3>
+                            <p>Selectively examine organ systems to receive realistic findings across medical, surgical,
+                                and emergency cases.</p>
+                        </div>
+                        <div class="about-card">
+                            <div class="about-icon">🔬</div>
+                            <h3>Multi-modal Diagnostics</h3>
+                            <p>Order and interpret lab results, algorithmically generated 12-lead ECGs, and HD clinical
+                                imaging.</p>
+                        </div>
+                        <div class="about-card">
+                            <div class="about-icon">📊</div>
+                            <h3>Structured Feedback</h3>
+                            <p>Receive immediate scoring across 5 domains with a narrative debrief from our "Senior
+                                Clinician" AI agent.</p>
+                        </div>
+                    </div>
+
+                    <div class="about-tech">
+                        <h3>Built with Modern AI Infrastructure</h3>
+                        <div class="tech-tags">
+                            <span class="tech-tag">MedGemma 4B</span>
+                            <span class="tech-tag">vLLM Inference</span>
+                            <span class="tech-tag">Modal Cloud</span>
+                            <span class="tech-tag">FastAPI</span>
+                            <span class="tech-tag">Cornerstone3D</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <input type="hidden" id="residentName" value="Resident" />
         </div>
 
@@ -146,7 +198,7 @@
 
             <div class="sim-layout">
 
-                <!-- LEFT: Patient chat -->
+                <!-- ROW 1 LEFT: Case Presentation -->
                 <div>
                     <div class="panel">
                         <div class="panel-header">Case Presentation</div>
@@ -155,31 +207,9 @@
                             <p class="presentation-text" id="presentationText"></p>
                         </div>
                     </div>
-
-                    <div class="panel">
-                        <div class="panel-header">History Taking
-                            <span class="spinner" id="chatSpinner">Thinking...</span>
-                        </div>
-                        <div class="panel-body">
-                            <div class="chat-messages" id="chatMessages" role="log" aria-label="Patient conversation">
-                                <div class="msg msg-patient">
-                                    <div class="msg-label">Patient</div>
-                                    <div class="msg-bubble">Hello, doctor. I'm not feeling well at all. Please help me.
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="chat-input-row">
-                                <input type="text" id="historyInput" placeholder="Ask the patient a question..."
-                                    aria-label="Ask patient a question"
-                                    onkeydown="if(event.key==='Enter') askHistory()" />
-                                <button class="btn-primary btn-sm" onclick="askHistory()">Ask</button>
-                            </div>
-                            <div class="quick-questions" id="quickQuestions"></div>
-                        </div>
-                    </div>
                 </div>
 
-                <!-- CENTRE: Exam + Investigations -->
+                <!-- ROW 1 RIGHT: Exam + Investigations -->
                 <div>
                     <div class="panel">
                         <div class="tab-bar" role="tablist">
@@ -237,7 +267,32 @@
                     </div>
                 </div>
 
-                <!-- RIGHT: Notes -->
+                <!-- ROW 2 LEFT: History Taking -->
+                <div>
+                    <div class="panel">
+                        <div class="panel-header">History Taking
+                            <span class="spinner" id="chatSpinner">Thinking...</span>
+                        </div>
+                        <div class="panel-body">
+                            <div class="chat-messages" id="chatMessages" role="log" aria-label="Patient conversation">
+                                <div class="msg msg-patient">
+                                    <div class="msg-label">Patient</div>
+                                    <div class="msg-bubble">Hello, doctor. I'm not feeling well at all. Please help me.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="chat-input-row">
+                                <input type="text" id="historyInput" placeholder="Ask the patient a question..."
+                                    aria-label="Ask patient a question"
+                                    onkeydown="if(event.key==='Enter') askHistory()" />
+                                <button class="btn-primary btn-sm" onclick="askHistory()">Ask</button>
+                            </div>
+                            <div class="quick-questions" id="quickQuestions"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROW 2 RIGHT: Your Notes -->
                 <div>
                     <div class="panel">
                         <div class="panel-header">Your Notes</div>
@@ -280,8 +335,7 @@ IV heparin bolus
         </div>
 
         <!-- ══════════════════ LIGHTBOX OVERLAY ══════════════════ -->
-        <div class="lightbox-overlay" id="lightboxOverlay" role="dialog" aria-modal="true"
-            aria-label="Imaging viewer">
+        <div class="lightbox-overlay" id="lightboxOverlay" role="dialog" aria-modal="true" aria-label="Imaging viewer">
             <div class="lightbox-header">
                 <div class="lightbox-title" id="lbTitle">Imaging Study</div>
                 <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close viewer">&#10005;</button>
@@ -374,14 +428,17 @@ IV heparin bolus
                     <span class="footer-copyright">&copy; 2026 Deepak Swaminathan. All rights reserved.</span>
                 </div>
                 <div class="footer-right">
-                    <a href="https://www.linkedin.com/in/deepak-swaminathan-90a707153/" target="_blank" rel="noopener" class="footer-link" aria-label="LinkedIn">
+                    <a href="https://www.linkedin.com/in/deepak-swaminathan-90a707153/" target="_blank" rel="noopener"
+                        class="footer-link" aria-label="LinkedIn">
                         <svg class="footer-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            <path
+                                d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
                         </svg>
                     </a>
                     <a href="mailto:23.deepak.s@gmail.com" class="footer-link" aria-label="Email">
                         <svg class="footer-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                            <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                            <path
+                                d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
                         </svg>
                     </a>
                 </div>
@@ -465,10 +522,11 @@ IV heparin bolus
                 const res = await fetch('/api/model/status');
                 const data = await res.json();
                 currentMode = data;
-                el.classList.remove('connected', 'simulated', 'disconnected');
+                el.classList.remove('connected', 'disconnected');
+                el.style.display = '';
                 if (data.mode === 'simulated') {
-                    el.classList.add('simulated');
-                    el.querySelector('.status-text').textContent = 'Simulated Mode (keyword-based)';
+                    // Hide the badge entirely in simulated/keyword mode
+                    el.style.display = 'none';
                 } else if (data.connected) {
                     el.classList.add('connected');
                     el.querySelector('.status-text').textContent = `${data.mode === 'cloud' ? 'Cloud' : 'Local'} AI: ${data.model}`;
@@ -1214,9 +1272,9 @@ IV heparin bolus
             // Show install prompt after a delay (don't be too aggressive)
             const hasDismissed = localStorage.getItem('medsimulation_install_dismissed');
             if (!hasDismissed) {
-                setTimeout(() => {
-                    showInstallPrompt();
-                }, 3000);
+                // setTimeout(() => {
+                //     showInstallPrompt();
+                // }, 3000);
             }
         });
 
