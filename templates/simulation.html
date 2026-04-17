@@ -37,7 +37,7 @@
                 </a>
             </div>
             <div class="nav-right">
-                <a href="#about" class="nav-link">About</a>
+                <a href="#about" class="nav-link" onclick="scrollToAbout(event)">About</a>
                 <div class="nav-user">
                     <span aria-label="Current user">Resident</span>
                 </div>
@@ -88,10 +88,7 @@
                 <p>Search a topic to instantly generate a custom clinical case, or choose from our recommendations
                     below.</p>
 
-                <div id="connectionStatus" class="connection-status" role="status" aria-live="polite">
-                    <span class="status-dot" aria-hidden="true"></span>
-                    <span class="status-text">Checking connection...</span>
-                </div>
+                <!-- Connection status badge removed per user request -->
 
                 <form id="searchForm" class="search-form" onsubmit="handleSearch(event)" role="search">
                     <input type="text" id="topicInput" class="search-input"
@@ -190,7 +187,6 @@
                     <span id="simCitation" class="sim-citation"></span>
                 </div>
                 <div class="sim-topbar-right">
-                    <span id="modeBadge" class="mode-badge" aria-label="AI mode"></span>
                     <span class="timer" aria-label="Elapsed time">Elapsed: <strong
                             id="timerDisplay">00:00</strong></span>
                 </div>
@@ -510,33 +506,28 @@ IV heparin bolus
             }
         });
 
+        // ── Scroll to About section ──
+        function scrollToAbout(e) {
+            e.preventDefault();
+            const aboutSection = document.getElementById('about');
+            if (aboutSection) {
+                aboutSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
         // ── Load cases ──
         document.addEventListener('DOMContentLoaded', () => {
-            checkConnectionStatus();
             loadCases();
         });
 
         async function checkConnectionStatus() {
-            const el = document.getElementById('connectionStatus');
+            // Connection status badge removed - function kept for internal mode tracking
             try {
                 const res = await fetch('/api/model/status');
                 const data = await res.json();
                 currentMode = data;
-                el.classList.remove('connected', 'disconnected');
-                el.style.display = '';
-                if (data.mode === 'simulated') {
-                    // Hide the badge entirely in simulated/keyword mode
-                    el.style.display = 'none';
-                } else if (data.connected) {
-                    el.classList.add('connected');
-                    el.querySelector('.status-text').textContent = `${data.mode === 'cloud' ? 'Cloud' : 'Local'} AI: ${data.model}`;
-                } else {
-                    el.classList.add('disconnected');
-                    el.querySelector('.status-text').textContent = `${data.mode} mode \u2014 vLLM not responding`;
-                }
             } catch (e) {
-                el.classList.add('disconnected');
-                el.querySelector('.status-text').textContent = 'Unable to check status';
+                // Silently fail - mode tracking is optional
             }
         }
 
@@ -686,16 +677,6 @@ IV heparin bolus
                 citation.innerHTML = `Source: ${escapeHtml(srcLabel)}${refText ? ' \u2014 ' + escapeHtml(refText) : ''}${href ? ` <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="cite-link" title="Verify source">&#x2197;</a>` : ''}`;
             } else {
                 citation.textContent = '';
-            }
-
-            // Mode badge
-            const badge = document.getElementById('modeBadge');
-            if (currentMode.connected) {
-                badge.className = 'mode-badge ai-mode';
-                badge.textContent = 'AI-Powered';
-            } else {
-                badge.className = 'mode-badge keyword-mode';
-                badge.textContent = 'Keyword Mode';
             }
 
             // Vitals

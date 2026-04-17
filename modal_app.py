@@ -143,7 +143,6 @@ def download_model(model_id: str = "google/medgemma-4b-it"):
     image=image,
     scaledown_window=300,  # Shut down after 5 min idle
     timeout=600,
-    enable_memory_snapshot=True,   # Required for snap=True in @modal.enter
     volumes={
         "/data": data_volume,
         "/models": model_volume,
@@ -157,30 +156,16 @@ def download_model(model_id: str = "google/medgemma-4b-it"):
 class VLLMService:
     """
     In-process vLLM AsyncLLMEngine running as a Modal class.
-
-    Using @modal.enter(snap=True) means:
-      - On the FIRST cold start: load_model() runs fully, then Modal snapshots GPU state.
-      - On SUBSEQUENT cold starts: Modal restores the snapshot, skipping load_model().
-        This reduces the restart from ~5 min → ~5-15 s.
     """
 
-    @modal.enter(snap=True)
+    @modal.enter()
     def load_model(self):
         """
         Initialise the vLLM AsyncLLMEngine.
-        Called once before the GPU snapshot is taken; subsequent boots restore from snapshot.
+        Called once when the container starts.
         """
         import os
         import asyncio
-
-        # Ensure vLLM can detect the GPU — Modal sets this but vLLM's subprocess
-        # inspection may not see it without explicit declaration.
-        # CRITICAL: Set BEFORE importing vLLM so subprocess inherits it.
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
-        # Clear any vLLM-related env vars that might confuse detection
-        os.environ.pop("VLLM_LOCAL_URL", None)
-        os.environ.pop("VLLM_MODE", None)
 
         model_id = os.getenv("VLLM_MODEL", "google/medgemma-4b-it")
         model_name = model_id.split("/")[-1]

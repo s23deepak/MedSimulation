@@ -294,6 +294,12 @@ class SimulationEngine:
         # Strip role prefixes the model sometimes echoes ("Patient: ", "Resident: ")
         text = re.sub(r"^(patient|resident|doctor)\s*:\s*", "", text, flags=re.IGNORECASE)
 
+        # Strip multi-turn conversation output (model continuing the dialogue)
+        # Keep only the first patient response, before any "USER:" or "RESIDENT:" marker
+        multi_turn_match = re.search(r"\n\s*(user|resident|doctor)\s*:", text, flags=re.IGNORECASE)
+        if multi_turn_match:
+            text = text[:multi_turn_match.start()].strip()
+
         if "\n\n" not in text:
             if text.lower().startswith("thought"):
                 return re.sub(

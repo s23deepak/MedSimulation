@@ -198,6 +198,120 @@ def _parse_pubmed_xml_multiple(xml_text: str) -> list[dict]:
 
 # ── Image Extraction ──────────────────────────────────────────────────────────
 
+async def extract_publisher_images(pmid: str, doi: str = None) -> list[dict]:
+    """
+    Scrape clinical figures from publisher websites when PMC isn't available.
+    Supports: Frontiers, BMC, PLOS, Elsevier, Wiley, Nature.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 MedSimulation/1.0 (medical education bot)",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    # Try to fetch from PubMed page which may have links to full text
+    pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+    html = None
+    publisher_url = None
+
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        try:
+            r = await client.get(pubmed_url, headers=headers)
+            if r.status_code == 200:
+                html = r.text
+                # Look for full-text links
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(html, "html.parser")
+                for link in soup.find_all("a", href=True):
+                    href = link["href"]
+                    if any(x in href.lower() for x in ["frontiers", "doi.org", "biomedcentral", "plos"]):
+                        publisher_url = href if href.startswith("http") else f"https://pubmed.ncbi.nlm.nih.gov{href}"
+                        break
+        except Exception as e:
+            logger.warning("PubMed page fetch failed for %s: %s", pmid, e)
+
+    # If we found a publisher link, try it
+    if publisher_url:
+        try:
+            r = await client.get(publisher_url, headers=headers)
+            if r.status_code == 200:
+                html = r.text
+                logger.info("Fetched publisher page: %s", publisher_url)
+        except Exception as e:
+            logger.warning("Publisher page fetch failed: %s", e)
+
+    if not html:
+        return []
+
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    images = []
+
+    # Frontiers-specific: figures are in <figure class="fig"> with <img class="img">
+    for figure in soup.find_all("figure", class_=["fig", "figure", "Fig"]):
+        img = figure.find("img")
+        if not img:
+            continue
+        src = img.get("src", "") or img.get("data-src", "")
+        if not src or src.startswith("data:"):
+            continue
+
+        # Resolve relative URLs for common publishers
+        if src.startswith("/"):
+            if "frontiers" in publisher_url:
+                src = "https://www.frontiersin.org" + src
+            elif "biomedcentral" in publisher_url:
+                src = "https://bmcmededuc.biomedcentral.com" + src
+
+        # Find caption
+        caption = img.get("alt", "")
+        figcaption = figure.find("figcaption")
+        if figcaption:
+            caption = figcaption.get_text(separator=" ", strip=True)
+
+        # Also check for figure description in sibling/parent elements
+        if not caption or len(caption) < 20:
+            for p in figure.find_parents(["div", "section"]):
+                desc = p.get_text(separator=" ", strip=True)
+                if "figure" in desc.lower() or "fig" in desc.lower():
+                    caption = desc[:500]
+                    break
+
+        if not caption or len(caption) < 10:
+            caption = "Clinical figure"
+
+        images.append(_make_image_entry(pmid, src, caption, len(images)))
+
+    # Fallback: scan all images with clinical-looking URLs or captions
+    if not images:
+        for img in soup.find_all("img"):
+            src = img.get("src", "") or img.get("data-src", "")
+            if not src or src.startswith("data:"):
+                continue
+            # Skip tiny icons, ads, etc.
+            if any(x in src.lower() for x in ["icon", "logo", "avatar", "ads", "pixel"]):
+                continue
+
+            caption = img.get("alt", "")
+            # Check parent for caption
+            for ancestor in img.parents:
+                if ancestor.name in ["figure", "div", "td"]:
+                    for cls in ancestor.get("class", []):
+                        if "fig" in str(cls).lower() or "caption" in str(cls).lower():
+                            cap = ancestor.find(text=True, recursive=False)
+                            if cap:
+                                caption = str(cap).strip()
+                            break
+
+            if caption and len(caption) > 20:
+                images.append(_make_image_entry(pmid, src, caption, len(images)))
+                if len(images) >= 5:
+                    break
+
+    logger.info("Extracted %d images from publisher (PMID: %s)", len(images), pmid)
+    return images
+
+
 async def extract_pmc_images(pmcid: str) -> list[dict]:
     """Scrape image URLs and captions from a PMC article HTML page."""
     headers = {"User-Agent": "Mozilla/5.0 MedSimulation/1.0 (medical education)"}
@@ -307,25 +421,39 @@ async def abstract_to_case(abstract: dict, vllm_client: Any) -> dict:
         f"MeSH Terms: {', '.join(abstract['mesh_terms'])}\n\n"
         f"Abstract:\n{abstract_text}"
     )
-    
+
     case_dict = await generate_case(
         vllm_client,
         source_text=source_text,
         source_type="pubmed",
         source_ref=abstract["pmid"],
     )
-    
-    # Phase G: Extract images if PMC ID is present
+
+    # Phase G: Extract images
+    images = []
+
+    # Try PMC first (preferred - higher quality images)
     if abstract.get("pmcid"):
         try:
             images = await extract_pmc_images(abstract["pmcid"])
             if images:
-                # Add to generated case
-                if "imaging_studies" not in case_dict:
-                    case_dict["imaging_studies"] = []
-                case_dict["imaging_studies"].extend(images)
-                logger.info("Extracted %d images from %s", len(images), abstract["pmcid"])
+                logger.info("Extracted %d images from PMC %s", len(images), abstract["pmcid"])
         except Exception as e:
-            logger.warning("Error extracting images for %s: %s", abstract["pmcid"], e)
-            
+            logger.warning("Error extracting PMC images for %s: %s", abstract["pmcid"], e)
+
+    # If no PMC images, try publisher website scraping
+    if not images:
+        try:
+            images = await extract_publisher_images(abstract["pmid"])
+            if images:
+                logger.info("Extracted %d images from publisher for PMID %s", len(images), abstract["pmid"])
+        except Exception as e:
+            logger.warning("Error extracting publisher images for %s: %s", abstract["pmid"], e)
+
+    # Add images to case if found
+    if images:
+        if "imaging_studies" not in case_dict:
+            case_dict["imaging_studies"] = []
+        case_dict["imaging_studies"].extend(images)
+
     return case_dict
