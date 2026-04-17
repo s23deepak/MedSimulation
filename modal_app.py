@@ -79,16 +79,18 @@ image = (
     )
     # HF_HOME → model volume so weights are cached there automatically
     .env({"HF_HOME": "/models/hf_cache"})
-    # Clone the repo to get source code
     .run_commands([
-        "git clone https://github.com/s23deepak/MedSimulation.git /root/src_repo || true",
-        "cp -r /root/src_repo/templates /root/ 2>/dev/null || mkdir -p /root/templates",
-        "cp -r /root/src_repo/static /root/ 2>/dev/null || mkdir -p /root/static",
-        "cp -r /root/src_repo/src /root/ 2>/dev/null || mkdir -p /root/src",
-        "cp /root/src_repo/main.py /root/ 2>/dev/null || true",
         "mkdir -p /root/data/imaging/dicom",
         "mkdir -p /root/.cache/vllm",
     ])
+    # Note: VLLM_* env vars are set per-function, not at image level,
+    # to avoid vLLM warnings about unknown environment variables
+    # add_local_* must come LAST — Modal injects these at container start, not build time
+    .add_local_dir("src", remote_path="/root/src")
+    .add_local_dir("templates", remote_path="/root/templates")
+    .add_local_dir("static", remote_path="/root/static")
+    .add_local_file("main.py", remote_path="/root/main.py")
+    .add_local_file("data/medsim.db", remote_path="/root/seed_medsim.db")
 )
 
 # ── One-time Model Download ──────────────────────────────────────────────────────
@@ -170,7 +172,15 @@ class VLLMService:
         """
         import os
         import asyncio
-        from vllm import AsyncLLMEngine, AsyncEngineArgs
+
+        # Ensure vLLM can detect the GPU — Modal sets this but vLLM's subprocess
+        # inspection may not see it without explicit declaration.
+        # CRITICAL: Set BEFORE importing vLLM so subprocess inherits it.
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+        # Clear any vLLM-related env vars that might confuse detection
+        os.environ.pop("VLLM_LOCAL_URL", None)
+        os.environ.pop("VLLM_MODE", None)
 
         model_id = os.getenv("VLLM_MODEL", "google/medgemma-4b-it")
         model_name = model_id.split("/")[-1]
@@ -181,6 +191,8 @@ class VLLMService:
         model_source = local_path if pathlib.Path(local_path).exists() else model_id
 
         print(f"Loading vLLM engine from: {model_source}")
+
+        from vllm import AsyncLLMEngine, AsyncEngineArgs
 
         engine_args = AsyncEngineArgs(
             model=model_source,
@@ -284,6 +296,14 @@ def serve():
     (app_dir / "data").mkdir(exist_ok=True)
     (app_dir / "data" / "imaging").mkdir(exist_ok=True)
     (app_dir / "data" / "imaging" / "dicom").mkdir(exist_ok=True)
+
+    # ── Seed DB from image if volume is empty ──────────────────────────────────
+    import shutil
+    vol_db = Path("/data/medsim.db")
+    seed_db = Path("/root/seed_medsim.db")
+    if (not vol_db.exists() or vol_db.stat().st_size == 0) and seed_db.exists() and seed_db.stat().st_size > 0:
+        shutil.copy2(str(seed_db), str(vol_db))
+        logger.info("Seeded production DB from image (%d bytes)", vol_db.stat().st_size)
 
     # ── Inject Modal-native vLLM client ────────────────────────────────────────
     # This must happen BEFORE importing main so from_env() sees the injected client.
