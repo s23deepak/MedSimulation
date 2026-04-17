@@ -25,7 +25,8 @@ data_volume = modal.Volume.from_name("medsimulation-data", create_if_missing=Tru
 
 # ── Image Definition ───────────────────────────────────────────────────────────
 
-# Base image with all dependencies
+# Base image with all dependencies and source code
+# Clone from GitHub to get the full source
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install(
@@ -55,6 +56,16 @@ image = (
         "accelerate>=0.27.0",
         "sentencepiece>=0.2.0",
     )
+    # Clone the repo to get source code
+    .run_commands([
+        "git clone https://github.com/s23deepak/MedSimulation.git /root/src_repo || true",
+        "cp -r /root/src_repo/templates /root/ 2>/dev/null || mkdir -p /root/templates",
+        "cp -r /root/src_repo/static /root/ 2>/dev/null || mkdir -p /root/static",
+        "cp -r /root/src_repo/src /root/ 2>/dev/null || mkdir -p /root/src",
+        "cp /root/src_repo/main.py /root/ 2>/dev/null || true",
+        "mkdir -p /root/data/imaging/dicom",
+        "mkdir -p /root/.cache/vllm",
+    ])
 )
 
 # ── Alternative: Lighter image (use Together AI for LLM) ───────────────────────
@@ -82,17 +93,19 @@ image_cpu = (
 # ── GPU Function (vLLM + FastAPI combined) ─────────────────────────────────────
 
 @app.function(
-    gpu="T4",  # Options: "T4" ($0.35/hr), "A10G" ($0.60/hr), "A100" ($1.30/hr)
-    container_idle_timeout=300,  # Shut down after 5 min of inactivity
+    gpu="A10G",  # Required for bfloat16 (MedGemma/Gemma3)
+                 # T4 ($0.35/hr) doesn't support bfloat16
+                 # A10G ($0.60/hr) has compute capability 8.6
+    scaledown_window=300,  # Shut down after 5 min of inactivity
     timeout=600,  # Max request timeout
-    allow_concurrent_inputs=50,
     volumes={"/data": data_volume},
     image=image,
     secrets=[
-        Secret.from_name("medsimulation-secrets", required=False),
-        Secret.from_dotenv(".env.modal", required=False),
+        Secret.from_name("medsimulation-secrets"),
+        Secret.from_dotenv(".env.modal"),
     ],
 )
+@modal.concurrent(max_inputs=50)
 @modal.asgi_app()
 def serve():
     """
@@ -128,7 +141,11 @@ def serve():
         "--gpu-memory-utilization", str(GPU_MEMORY),
         "--max-model-len", str(MAX_MODEL_LEN),
         "--trust-remote-code",
-        "--dtype", "bfloat16",
+        "--dtype", "bfloat16",  # Required for Gemma3/MedGemma
+        # Fast startup optimizations
+        "--disable-torch-compile",      # Saves ~75s compile time
+        "--disable-cuda-graph",         # Saves ~20s graph capture
+        "--max-num-batched-tokens", "4096",  # Limit batch size for faster init
     ]
 
     # Add quantization if enabled
@@ -144,21 +161,17 @@ def serve():
 
     # ── Wait for vLLM to be ready ──────────────────────────────────────────────
 
-    def wait_for_vllm(timeout=180):
+    def wait_for_vllm(timeout=360):
         """Wait until vLLM is responding to health checks."""
         start = time.time()
         while time.time() - start < timeout:
             try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                result = sock.connect_ex(("localhost", VLLM_PORT))
-                sock.close()
-                if result == 0:
-                    # Port is open, do HTTP health check
-                    import httpx
-                    resp = httpx.get(f"http://localhost:{VLLM_PORT}/models", timeout=5)
-                    if resp.status_code == 200:
-                        logger.info("vLLM is ready!")
-                        return True
+                # Port is open, do HTTP health check
+                import httpx
+                resp = httpx.get(f"http://localhost:{VLLM_PORT}/v1/models", timeout=10)
+                if resp.status_code == 200:
+                    logger.info("vLLM is ready!")
+                    return True
             except Exception:
                 pass
             logger.info("Waiting for vLLM to start... (%.0fs)", time.time() - start)
@@ -185,15 +198,21 @@ def serve():
     import sys
     from pathlib import Path
 
-    app_dir = Path(__file__).parent
+    # Source is at /root/
+    app_dir = Path("/root")
     if str(app_dir) not in sys.path:
         sys.path.insert(0, str(app_dir))
+
+    # Change working directory
+    import os
+    os.chdir("/root")
 
     # Set up data directories
     (app_dir / "data").mkdir(exist_ok=True)
     (app_dir / "data" / "imaging").mkdir(exist_ok=True)
     (app_dir / "data" / "imaging" / "dicom").mkdir(exist_ok=True)
 
+    # Import and return the FastAPI app
     from main import app as backend_app
 
     logger.info("MedSimulation backend ready")
@@ -206,16 +225,16 @@ def serve():
 
 @app.function(
     gpu=None,  # No GPU needed - uses cloud LLM
-    container_idle_timeout=300,
+    scaledown_window=300,
     timeout=300,
-    allow_concurrent_inputs=50,
     volumes={"/data": data_volume},
     image=image_cpu,
     secrets=[
-        Secret.from_name("medsimulation-secrets", required=False),
-        Secret.from_dotenv(".env.modal", required=False),
+        Secret.from_name("medsimulation-secrets"),
+        Secret.from_dotenv(".env.modal"),
     ],
 )
+@modal.concurrent(max_inputs=50)
 @modal.asgi_app()
 def serve_cpu():
     """
