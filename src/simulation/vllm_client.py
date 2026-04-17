@@ -293,17 +293,17 @@ class ModalVLLMClient:
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 512,
+        max_tokens: int = 256,
         **kwargs,
     ) -> str:
-        """Call VLLMService.generate.aio() via Modal RPC."""
-        # Flatten chat messages the same way VLLMService expects (single prompt)
-        prompt = "\n".join(
-            f"{m['role'].upper()}: {m['content']}" for m in messages
-        )
-        logger.info("ModalVLLMClient: dispatching generate to VLLMService RPC")
-        return await self._svc.generate.remote.aio(
-            prompt, max_tokens=max_tokens, temperature=temperature
+        """Call VLLMService.generate.aio() via Modal RPC.
+
+        Uses the full conversation history - the model's chat template
+        handles proper formatting internally.
+        """
+        logger.info("ModalVLLMClient: dispatching chat with %d messages", len(messages))
+        return await self._svc.chat.remote.aio(
+            messages, max_tokens=max_tokens, temperature=temperature
         )
 
     async def generate_async(

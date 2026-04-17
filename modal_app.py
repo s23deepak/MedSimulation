@@ -76,6 +76,7 @@ image = (
         "sentencepiece>=0.2.0",
         # Used by download_model()
         "huggingface_hub>=0.23.0",
+        "requests>=2.31.0",  # For vLLM sleep/wake/warmup helpers
     )
     # HF_HOME → model volume so weights are cached there automatically
     .env({"HF_HOME": "/models/hf_cache"})
@@ -138,10 +139,78 @@ def download_model(model_id: str = "google/medgemma-4b-it"):
 
 # ── VLLMService ─────────────────────────────────────────────────────────────────
 
+VLLM_PORT = 8001
+
+
+def wait_for_vllm(port: int = VLLM_PORT, timeout: int = 300):
+    """Wait for vLLM server to be ready."""
+    import socket
+    import time
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            socket.create_connection(("localhost", port), timeout=1).close()
+            return True
+        except (socket.error, ConnectionRefusedError):
+            time.sleep(0.5)
+    raise TimeoutError("vLLM server did not start")
+
+
+def warmup_vllm(port: int = VLLM_PORT):
+    """Run warmup request to capture JIT state."""
+    import requests
+    # Use the served model name
+    payload = {
+        "model": "medgemma",
+        "messages": [{"role": "user", "content": "Hello"}],
+        "max_tokens": 16,
+    }
+    try:
+        resp = requests.post(
+            f"http://localhost:{port}/v1/chat/completions",
+            json=payload,
+            timeout=60,
+        )
+        resp.raise_for_status()
+        print(f"Warmup complete: {resp.json()['choices'][0]['message']['content'][:50]}")
+    except Exception as e:
+        print(f"Warmup failed: {e}")
+
+
+def sleep_vllm(port: int = VLLM_PORT, level: int = 1):
+    """Put vLLM to sleep (offload weights to CPU)."""
+    import requests
+    # Try v1 endpoint first, fall back to root endpoint
+    for endpoint in [f"/v1/sleep?level={level}", f"/sleep?level={level}"]:
+        try:
+            resp = requests.post(f"http://localhost:{port}{endpoint}", timeout=30)
+            if resp.status_code == 200:
+                print("vLLM entered sleep mode")
+                return
+        except Exception as e:
+            pass
+    print("Sleep mode not available (this is OK)")
+
+
+def wake_vllm(port: int = VLLM_PORT):
+    """Wake vLLM from sleep."""
+    import requests
+    # Try v1 endpoint first, fall back to root endpoint
+    for endpoint in ["/v1/wake_up", "/wake_up"]:
+        try:
+            resp = requests.post(f"http://localhost:{port}{endpoint}", timeout=30)
+            if resp.status_code == 200:
+                print("vLLM woke up")
+                return
+        except Exception as e:
+            pass
+    print("Wake called (sleep mode may not be active)")
+
+
 @app.cls(
-    gpu="A10G",            # bfloat16 requires compute capability ≥ 8.0 (A10G = 8.6)
+    gpu="A10G",
     image=image,
-    scaledown_window=300,  # Shut down after 5 min idle
+    scaledown_window=300,
     timeout=600,
     volumes={
         "/data": data_volume,
@@ -151,83 +220,131 @@ def download_model(model_id: str = "google/medgemma-4b-it"):
         Secret.from_name("medsimulation-secrets"),
         Secret.from_dotenv(".env.modal"),
     ],
+    enable_memory_snapshot=True,
+    experimental_options={"enable_gpu_snapshot": True},
 )
 @modal.concurrent(max_inputs=50)
 class VLLMService:
     """
-    In-process vLLM AsyncLLMEngine running as a Modal class.
+    vLLM server running as a subprocess with sleep mode for GPU snapshots.
     """
 
-    @modal.enter()
-    def load_model(self):
-        """
-        Initialise the vLLM AsyncLLMEngine.
-        Called once when the container starts.
-        """
+    @modal.enter(snap=True)
+    def start(self):
+        """Start vLLM server and warmup for snapshot."""
         import os
-        import asyncio
+        import subprocess
 
         model_id = os.getenv("VLLM_MODEL", "google/medgemma-4b-it")
         model_name = model_id.split("/")[-1]
         local_path = f"/models/{model_name}"
 
-        # Prefer the pre-downloaded local copy; fall back to HF download if missing
         import pathlib
         model_source = local_path if pathlib.Path(local_path).exists() else model_id
 
-        print(f"Loading vLLM engine from: {model_source}")
+        print(f"Starting vLLM serve from: {model_source}")
 
-        from vllm import AsyncLLMEngine, AsyncEngineArgs
+        cmd = [
+            "vllm", "serve",
+            model_source,
+            "--host", "0.0.0.0",
+            "--port", str(VLLM_PORT),
+            "--dtype", "bfloat16",
+            "--gpu-memory-utilization", os.getenv("VLLM_GPU_MEMORY", "0.8"),
+            "--max-model-len", os.getenv("VLLM_MAX_MODEL_LEN", "4096"),
+            "--enforce-eager",
+            "--disable-log-stats",
+            "--max-num-seqs", "16",
+            "--max-num-batched-tokens", "4096",
+            "--served-model-name", "medgemma",
+        ]
 
-        engine_args = AsyncEngineArgs(
-            model=model_source,
-            dtype="bfloat16",              # Required for Gemma3 / MedGemma
-            gpu_memory_utilization=float(os.getenv("VLLM_GPU_MEMORY", "0.85")),
-            max_model_len=int(os.getenv("VLLM_MAX_MODEL_LEN", "4096")),
-            trust_remote_code=True,
-            # ── Fast-boot flags: skip JIT that's already paid for in the snapshot ──
-            enforce_eager=True,            # Disable CUDA graph capture (~20 s saved)
-            # torch.compile is off by default in vLLM ≥ 0.6; leave it that way
-            max_num_batched_tokens=4096,
-        )
+        print(f"vLLM cmd: {' '.join(cmd)}")
+        self.vllm_proc = subprocess.Popen(cmd)
+        wait_for_vllm(VLLM_PORT, timeout=300)
+        print("vLLM server ready")
+        warmup_vllm(VLLM_PORT)
+        print("vLLM warmup complete - snapshot will be created")
 
-        # Store on self so it survives across requests
-        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
-
-        # Store model name for health responses
-        self.model_id = model_id
-
-        print("vLLM engine ready!")
+    @modal.enter(snap=False)
+    def wake_up(self):
+        """Ensure vLLM is ready after snapshot restore."""
+        # Server should already be running after restore
+        wait_for_vllm(VLLM_PORT, timeout=60)
+        print("vLLM ready after restore")
 
     @modal.method()
     async def generate(
         self,
         prompt: str,
-        max_tokens: int = 1024,
+        max_tokens: int = 256,
         temperature: float = 0.7,
         request_id: str | None = None,
     ) -> str:
-        """Generate a completion for `prompt`. Returns the full output text."""
-        import uuid
-        from vllm import SamplingParams
+        """Generate via HTTP to vLLM serve."""
+        import aiohttp
+        payload = {
+            "model": "medgemma",
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stop": ["USER:", "RESIDENT:", "DOCTOR:", "PATIENT:", "ASSISTANT:"],
+            "repetition_penalty": 1.1,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"http://localhost:{VLLM_PORT}/v1/completions",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                return data["choices"][0]["text"]
 
-        sampling_params = SamplingParams(
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-        req_id = request_id or str(uuid.uuid4())
-
-        output_text = ""
-        async for request_output in self.engine.generate(prompt, sampling_params, req_id):
-            if request_output.finished:
-                output_text = request_output.outputs[0].text
-
-        return output_text
+    @modal.method()
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int = 256,
+        temperature: float = 0.7,
+        request_id: str | None = None,
+    ) -> str:
+        """Chat completion via HTTP to vLLM serve."""
+        import aiohttp
+        payload = {
+            "model": "medgemma",
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stop": ["USER:", "RESIDENT:", "DOCTOR:", "PATIENT:", "ASSISTANT:"],
+            "repetition_penalty": 1.1,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"http://localhost:{VLLM_PORT}/v1/chat/completions",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"]
 
     @modal.method()
     async def health(self) -> dict:
-        """Quick liveness check — returns model name and status."""
-        return {"status": "ok", "model": self.model_id}
+        """Health check via HTTP."""
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"http://localhost:{VLLM_PORT}/health",
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                return {"status": "ok" if resp.status == 200 else "unhealthy"}
+
+    @modal.exit()
+    def stop(self):
+        """Cleanup vLLM process on shutdown."""
+        if hasattr(self, "vllm_proc") and self.vllm_proc:
+            self.vllm_proc.terminate()
 
 
 # ── Web Application (FastAPI + VLLMService) ─────────────────────────────────────
@@ -412,7 +529,7 @@ def main(
 
     if cpu:
         print("Deploying CPU version (cloud LLM mode)")
-        return serve_cpu.web_url
+        print("Access at: https://<workspace>--medsimulation-serve-cpu.modal.run")
     else:
         print(f"Deploying GPU version with model: {model}")
-        return serve.web_url
+        print("Access at: https://<workspace>--medsimulation-serve.modal.run")
