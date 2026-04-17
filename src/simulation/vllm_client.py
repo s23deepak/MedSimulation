@@ -302,7 +302,7 @@ class ModalVLLMClient:
             f"{m['role'].upper()}: {m['content']}" for m in messages
         )
         logger.info("ModalVLLMClient: dispatching generate to VLLMService RPC")
-        return await self._svc.generate.aio(
+        return await self._svc.generate.remote.aio(
             prompt, max_tokens=max_tokens, temperature=temperature
         )
 
@@ -313,14 +313,14 @@ class ModalVLLMClient:
         max_tokens: int = 512,
         **kwargs,
     ) -> str:
-        return await self._svc.generate.aio(
+        return await self._svc.generate.remote.aio(
             prompt, max_tokens=max_tokens, temperature=temperature
         )
 
     async def health_async(self) -> bool:
         """VLLMService is healthy if Modal routing reached us."""
         try:
-            result = await self._svc.health.aio()
+            result = await self._svc.health.remote.aio()
             return result.get("status") == "ok"
         except Exception:
             return True  # Assume healthy — health check failure shouldn't block startup
