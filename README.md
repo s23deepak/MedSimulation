@@ -162,9 +162,12 @@ python -m modal setup
 
 # 3. Create Modal secrets for HuggingFace (required for MedGemma)
 # Get token at: https://huggingface.co/settings/tokens
+# Optional: FIRECRAWL_API_KEY for enhanced image extraction (free tier: 500 pages)
+# Get key at: https://www.firecrawl.dev/app/api-keys
 modal secret create medsimulation-secrets \
     HF_TOKEN=hf_your_token_here \
-    OPENAI_API_KEY=sk_your_key_here
+    OPENAI_API_KEY=sk_your_key_here \
+    FIRECRAWL_API_KEY=fc_your_key_here  # Optional, for publisher image extraction
 
 # 4. Deploy!
 modal deploy modal_app.py
@@ -298,6 +301,30 @@ MedSimulation/
 - Audio transcriptions (whisper) for hands-free simulation.
 
 ## 🗒️ Known Limitations / TODO
+
+### Image Extraction
+
+**Hybrid Extraction Pipeline** (implemented):
+- **PMC (preferred)**: Direct extraction from PMC CDN — highest quality, no hotlink protection
+- **Direct scraping**: Publisher website scraping for Frontiers, PLOS, BMC — works well
+- **Firecrawl fallback**: JavaScript-rendered page scraping — handles dynamic content
+- **Screenshot fallback**: For hotlink-protected publishers (Wiley, Elsevier, Lancet) — captures full page screenshot with figure captions
+
+**Publisher Support Matrix**:
+
+| Publisher | PMCID Articles | Non-PMCID Articles | Method |
+|-----------|----------------|-------------------|--------|
+| **PMC/NIH** | ✅ Full images | N/A | Direct CDN |
+| **PLOS** | ✅ Full images | ✅ Screenshots | Direct + Firecrawl |
+| **Frontiers** | ✅ Full images | ✅ Direct URLs | Direct scraping |
+| **BMC** | ✅ Full images | ⚠️ Limited | Firecrawl (some blocking) |
+| **Wiley** | ✅ Full images | ✅ Screenshots | Screenshot fallback |
+| **Elsevier** | ✅ Full images | ✅ Screenshots | Screenshot fallback |
+
+**Notes**:
+- Wiley/Elsevier use JavaScript to load images and have hotlink protection — screenshots show the full article page with figures visible
+- Firecrawl free tier: 500 pages (one-time), then ~$16/mo for 3,000 pages
+- Screenshot extraction captures figure captions but links to full page view rather than individual images
 
 ### UX & Clinical Realism
 - **Lab/Imaging results for newly ordered tests**: When a resident orders a test not pre-loaded in the case (e.g. selecting a CBC mid-simulation), the UI currently returns "no result available." The system should dynamically generate plausible, case-consistent results for any ordered test rather than surfacing a dead-end.

@@ -750,11 +750,53 @@ select:focus:not(:focus-visible) {
     gap: 1rem;
 }
 
+.sim-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+    min-width: 0;
+}
+
 .sim-topbar h2 {
     font-size: 1.15rem;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Back link styling - matches existing nav links */
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.back-link:hover {
+    color: var(--primary);
+    background: var(--bg-secondary);
+    text-decoration: none;
+}
+
+.back-arrow {
+    font-size: 1rem;
+    line-height: 1;
+    transition: transform 0.15s ease;
+}
+
+.back-link:hover .back-arrow {
+    transform: translateX(-2px);
 }
 
 .sim-meta {

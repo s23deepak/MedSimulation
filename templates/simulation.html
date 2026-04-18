@@ -181,7 +181,11 @@
         <!-- ══════════════════ SCREEN 2: SIMULATION ══════════════════ -->
         <div id="screen-sim" class="screen">
             <div class="sim-topbar">
-                <div>
+                <div class="sim-topbar-left">
+                    <a href="/" class="back-link" aria-label="Back to home">
+                        <span class="back-arrow">&larr;</span>
+                        <span>Home</span>
+                    </a>
                     <h2 id="simTitle">Case Title</h2>
                     <span id="simMeta" class="sim-meta"></span>
                     <span id="simCitation" class="sim-citation"></span>
@@ -356,8 +360,14 @@ IV heparin bolus
         <!-- ══════════════════ SCREEN 3: RESULTS ══════════════════ -->
         <div id="screen-results" class="screen">
             <div class="sim-topbar">
-                <h2 id="resultsTitle">Case Debrief</h2>
-                <div style="display:flex;gap:8px;">
+                <div class="sim-topbar-left">
+                    <a href="#" class="back-link" onclick="goToSimulation(); return false;" aria-label="Back to simulation">
+                        <span class="back-arrow">&larr;</span>
+                        <span>Back to Simulation</span>
+                    </a>
+                    <h2 id="resultsTitle">Case Debrief</h2>
+                </div>
+                <div class="sim-topbar-right">
                     <button class="btn-outline" onclick="exportSession('pdf')">Export PDF</button>
                     <button class="btn-outline" onclick="exportSession('json')">Export JSON</button>
                     <button class="btn-outline" onclick="goToLanding()">Try Another Case</button>
@@ -494,6 +504,11 @@ IV heparin bolus
             currentSession = null;
             allResults.length = 0;
             showScreen('screen-landing');
+        }
+
+        function goToSimulation() {
+            // Return to the simulation screen from results
+            showScreen('screen-sim');
         }
 
         // ── Keyboard shortcuts ──
