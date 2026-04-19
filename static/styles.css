@@ -591,6 +591,122 @@ select:focus:not(:focus-visible) {
     display: block;
 }
 
+/* ── vLLM Loading Screen ───────────────────────────────────────────────────── */
+.vllm-loading {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.vllm-loading.hidden {
+    display: none;
+}
+
+.vllm-loading-content {
+    text-align: center;
+    color: white;
+    max-width: 400px;
+    padding: 2rem;
+}
+
+.vllm-loading-icon {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 1.5rem;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vllm-loading-icon svg {
+    width: 60px;
+    height: 60px;
+    color: var(--primary);
+    position: relative;
+    z-index: 2;
+}
+
+.pulse-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0.3;
+    animation: vllmPulse 1.5s ease-out infinite;
+}
+
+@keyframes vllmPulse {
+    0% {
+        transform: scale(0.5);
+        opacity: 0.5;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+.vllm-loading-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+}
+
+.vllm-loading-text {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 1.5rem;
+}
+
+.vllm-loading-spinner {
+    margin: 1.5rem 0;
+}
+
+.spinner-bar {
+    width: 200px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 0 auto;
+    position: relative;
+}
+
+.spinner-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, var(--primary), var(--primary-light));
+    border-radius: 2px;
+    animation: spinnerSlide 1.2s ease-in-out infinite;
+}
+
+@keyframes spinnerSlide {
+    0% {
+        left: -40%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+
+.vllm-loading-hint {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 1rem;
+}
+
 /* ── Search error ──────────────────────────────────────────────────────────── */
 .search-error {
     display: none;
@@ -752,8 +868,9 @@ select:focus:not(:focus-visible) {
 
 .sim-topbar-left {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
     flex: 1;
     min-width: 0;
 }
@@ -768,13 +885,14 @@ select:focus:not(:focus-visible) {
     text-overflow: ellipsis;
 }
 
-/* Back link styling - matches existing nav links */
+/* Back link styling - positioned above title */
 .back-link {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.35rem 0.6rem;
-    font-size: 0.85rem;
+    padding: 0.25rem 0.5rem;
+    margin-left: -0.5rem;
+    font-size: 0.8rem;
     font-weight: 500;
     color: var(--text-secondary);
     text-decoration: none;
@@ -1315,6 +1433,37 @@ select:focus:not(:focus-visible) {
     margin-bottom: 0.4rem;
 }
 
+.imaging-preview {
+    width: 100%;
+    height: 120px;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.imaging-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.imaging-modality-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--primary);
+    background: rgba(37, 99, 235, 0.1);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    margin-bottom: 0.25rem;
+    display: inline-block;
+}
+
 .imaging-modality {
     font-size: 0.65rem;
     font-weight: 700;
@@ -1392,10 +1541,68 @@ select:focus:not(:focus-visible) {
     background: rgba(255, 255, 255, 0.3);
 }
 
+/* Zoom controls in lightbox header */
+.lightbox-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.4rem 0.6rem;
+    border-radius: var(--radius-lg);
+}
+
+.zoom-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    font-size: 1.4rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.zoom-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.zoom-btn:active {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.zoom-reset-btn {
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: transparent;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.zoom-reset-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.zoom-level {
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 600;
+    min-width: 45px;
+    text-align: center;
+}
+
 .lightbox-body {
-    max-width: 90vw;
-    max-height: 75vh;
-    overflow: auto;
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow: hidden;  /* Changed to hidden for smoother pan */
     border-radius: 8px;
     background: #fef9ef;
 }

@@ -249,13 +249,14 @@ async def _extract_with_screenshots(url: str, pmid: str) -> list[dict]:
             html_data = html_resp.json()
             html = html_data.get("data", {}).get("html", "") if html_data.get("success") else ""
 
-            # Get full page screenshot
+            # Get screenshot of main content only (not full page to exclude header)
             screenshot_resp = await client.post(
                 "https://api.firecrawl.dev/v1/scrape",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={
                     "url": url,
                     "formats": ["screenshot"],
+                    "fullPage": False,  # Only capture viewport (excludes header)
                 },
             )
             screenshot_data = screenshot_resp.json()
@@ -274,6 +275,26 @@ async def _extract_with_screenshots(url: str, pmid: str) -> list[dict]:
             # Extract figure captions from HTML
             figure_captions = []
 
+            # UI noise patterns to remove from captions
+            ui_noise_patterns = [
+                "Open in figure viewer",
+                "PowerPoint",
+                "figure viewer",
+                "Open in",
+                "Close figure viewer",
+                "Download figure",
+                "View figure",
+                "Toggle panel",
+            ]
+
+            def clean_caption(text: str) -> str:
+                """Remove UI noise from caption text."""
+                for pattern in ui_noise_patterns:
+                    text = text.replace(pattern, "")
+                # Clean up extra whitespace
+                text = " ".join(text.split())
+                return text.strip()
+
             # Strategy 1: Find <figure> tags
             for figure in soup.find_all("figure"):
                 caption = ""
@@ -291,6 +312,7 @@ async def _extract_with_screenshots(url: str, pmid: str) -> list[dict]:
 
                 if caption or label:
                     full_caption = f"{label} {caption}".strip()
+                    full_caption = clean_caption(full_caption)
                     if full_caption and full_caption not in figure_captions:
                         figure_captions.append(full_caption)
 
@@ -311,6 +333,7 @@ async def _extract_with_screenshots(url: str, pmid: str) -> list[dict]:
                             caption = text
                             break
 
+                caption = clean_caption(caption)
                 if caption and caption not in figure_captions:
                     figure_captions.append(caption)
 
@@ -394,7 +417,8 @@ async def extract_with_firecrawl(url: str, pmid: str) -> list[dict]:
 
     Supports:
     - PLOS, Frontiers, BMC: Direct image URL extraction
-    - Wiley, Elsevier, Lancet: Screenshot fallback (hotlink protected)
+    - Wiley: Dedicated extractor (preferred) → Screenshot fallback
+    - Elsevier, Lancet: Screenshot fallback (hotlink protected)
     """
     import os
 
@@ -406,8 +430,23 @@ async def extract_with_firecrawl(url: str, pmid: str) -> list[dict]:
     # Check if this publisher uses hotlink protection
     from urllib.parse import urlparse
     domain = urlparse(url).netloc
-    use_screenshots = any(protected in domain for protected in HOTLINK_PROTECTED)
 
+    # Wiley: Try dedicated extractor first (extracts actual figures, not screenshots)
+    if "wiley.com" in domain:
+        logger.info("Wiley publisher detected, trying dedicated extractor first")
+        try:
+            from .wiley import extract_wiley_images
+            wiley_images = await extract_wiley_images(url)
+            if wiley_images:
+                logger.info("Wiley extractor succeeded for PMID %s", pmid)
+                return wiley_images
+            logger.info("Wiley extractor returned no results, falling back to screenshots")
+        except Exception as e:
+            logger.warning("Wiley extractor failed for PMID %s: %s", pmid, e)
+            logger.info("Falling back to screenshot method")
+
+    # Other hotlink-protected publishers: use screenshots
+    use_screenshots = any(protected in domain for protected in HOTLINK_PROTECTED)
     if use_screenshots:
         logger.info("Hotlink-protected publisher detected (%s), using screenshot fallback", domain)
         return await _extract_with_screenshots(url, pmid)
@@ -617,6 +656,7 @@ async def extract_publisher_images(pmid: str, doi: str = None) -> list[dict]:
 
         # Fallback: scan all images with clinical-looking URLs or captions
         if not images:
+            import re
             for img in soup.find_all("img"):
                 src = img.get("src", "") or img.get("data-src", "")
                 if not src or src.startswith("data:"):
@@ -636,7 +676,18 @@ async def extract_publisher_images(pmid: str, doi: str = None) -> list[dict]:
                                     caption = str(cap).strip()
                                 break
 
-                if caption and len(caption) > 20:
+                # If still no caption, search nearby text for figure patterns
+                if not caption or len(caption) < 10:
+                    for ancestor in img.parents:
+                        if ancestor.name in ["figure", "div", "section", "article"]:
+                            # Look for text containing "Figure 1", "Fig. 1", etc.
+                            text = ancestor.get_text(separator=" ", strip=True)
+                            fig_match = re.search(r'(?:Figure|Fig)\s*\d+[A-Za-z]?\s*[:\-\.]\s*([^.]+)', text, re.IGNORECASE)
+                            if fig_match:
+                                caption = fig_match.group(1).strip()[:300]
+                                break
+
+                if caption and len(caption) > 10:
                     images.append(_make_image_entry(pmid, src, caption, len(images)))
                     if len(images) >= 5:
                         break

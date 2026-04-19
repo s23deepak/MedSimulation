@@ -4,6 +4,7 @@ FastAPI server for AI-powered resident training and competency assessment.
 """
 
 import argparse
+import asyncio
 import logging
 import os
 import sys
@@ -49,6 +50,8 @@ logger = logging.getLogger(__name__)
 # ── Global state ──────────────────────────────────────────────────────────────
 simulation_engine = None
 vllm_client = None
+vllm_ready = False  # Track vLLM readiness
+vllm_warming_up = False  # Track if warmup is in progress
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -56,10 +59,57 @@ vllm_client = None
 from contextlib import asynccontextmanager
 
 
+async def warmup_vllm():
+    """Send a warmup prompt to vLLM to wake it from sleep.
+
+    In Modal mode, vLLM may take 30-60 seconds to start, so we retry
+    the warmup until it succeeds.
+    """
+    global vllm_ready, vllm_warming_up
+
+    if vllm_client is None:
+        vllm_ready = True  # Simulated mode is always ready
+        return
+
+    max_retries = 30  # Retry for up to 60 seconds (2s intervals)
+    retry_count = 0
+
+    while retry_count < max_retries:
+        try:
+            logger.info("Sending warmup prompt to vLLM (attempt %d/%d)...", retry_count + 1, max_retries)
+
+            # First check health
+            healthy = await vllm_client.health_async()
+            if not healthy:
+                raise Exception("vLLM health check failed")
+
+            # Send a simple warmup prompt to wake the model
+            warmup_messages = [
+                {"role": "system", "content": "You are a medical AI assistant. Respond briefly."},
+                {"role": "user", "content": "Say 'ready' in one word."}
+            ]
+            response = await vllm_client.chat_async(warmup_messages, max_tokens=10, timeout=60.0)
+            logger.info("vLLM warmup response: %s", response.strip()[:50] if response else "empty")
+            vllm_ready = True
+            vllm_warming_up = False
+            logger.info("✓ vLLM is ready after %d attempts", retry_count + 1)
+            return
+
+        except Exception as e:
+            retry_count += 1
+            if retry_count >= max_retries:
+                logger.warning("vLLM warmup failed after %d attempts: %s", retry_count, e)
+                vllm_warming_up = False
+                vllm_ready = True  # Allow requests anyway
+                return
+            logger.info("vLLM not ready yet (attempt %d/%d): %s", retry_count, max_retries, e)
+            await asyncio.sleep(2)  # Wait 2 seconds before retry
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown."""
-    global simulation_engine, vllm_client
+    global simulation_engine, vllm_client, vllm_ready, vllm_warming_up
 
     # Load any JSON case files
     load_cases_from_json()
@@ -75,19 +125,15 @@ async def lifespan(app: FastAPI):
     vllm_client = VLLMClient.from_env()
 
     if vllm_client is not None:
-        healthy = await vllm_client.health_async()
-        if healthy:
-            logger.info("✓ Connected to vLLM: %s", vllm_client)
-        else:
-            logger.warning(
-                "vLLM server at %s not responding — "
-                "falling back to keyword-based mode. "
-                "Start vLLM with: bash scripts/start_vllm.sh",
-                vllm_client.base_url,
-            )
-            vllm_client = None
+        # In Modal mode, vLLM may not be ready yet — start warmup anyway
+        # The warmup will retry until vLLM responds
+        logger.info("vLLM client initialized: %s", vllm_client)
+        logger.info("Starting vLLM warmup in background...")
+        vllm_warming_up = True
+        asyncio.create_task(warmup_vllm())
     else:
         logger.info("Running in SIMULATED_MODE — keyword-based patient responses")
+        vllm_ready = True  # Simulated mode is ready
 
 
     # ── Initialize database and load dynamic cases ─────────────────────────
@@ -173,6 +219,38 @@ async def simulation_page(request: Request):
 async def offline_page(request: Request):
     """Offline fallback page for PWA."""
     return templates.TemplateResponse("offline.html", {"request": request})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Health & Readiness endpoints
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/health")
+async def api_health():
+    """Health check endpoint with vLLM readiness status."""
+    global vllm_ready, vllm_warming_up
+    return {
+        "status": "ok",
+        "vllm_ready": vllm_ready,
+        "vllm_warming_up": vllm_warming_up,
+        "vllm_mode": os.getenv("VLLM_MODE", "simulated"),
+    }
+
+
+@app.post("/api/vllm/warmup")
+async def api_vllm_warmup():
+    """Manually trigger vLLM warmup (for Modal wake-on-first-request)."""
+    global vllm_ready, vllm_warming_up
+
+    if vllm_ready:
+        return {"status": "already_ready"}
+
+    if vllm_warming_up:
+        return {"status": "warming_up"}
+
+    # Start warmup in background
+    asyncio.create_task(warmup_vllm())
+    return {"status": "warming_up"}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

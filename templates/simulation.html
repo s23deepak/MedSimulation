@@ -79,7 +79,26 @@
         <span>You're offline - some features may be unavailable</span>
     </div>
 
-    <div class="sim-wrapper">
+    <!-- vLLM Loading Screen -->
+    <div id="vllmLoading" class="vllm-loading" role="alert" aria-live="polite">
+        <div class="vllm-loading-content">
+            <div class="vllm-loading-icon">
+                <span class="pulse-ring"></span>
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="currentColor" opacity="0.2"/>
+                    <path d="M12 6C11.45 6 11 6.45 11 7V12C11 12.55 11.45 13 12 13C12.55 13 13 12.55 13 12V7C13 6.45 12.55 6 12 6ZM12 15C11.45 15 11 15.45 11 16C11 16.55 11.45 17 12 17C12.55 17 13 16.55 13 16C13 15.45 12.55 15 12 15Z" fill="currentColor"/>
+                </svg>
+            </div>
+            <h2 class="vllm-loading-title">Initializing AI</h2>
+            <p class="vllm-loading-text">Warming up the clinical AI model...</p>
+            <div class="vllm-loading-spinner">
+                <div class="spinner-bar"></div>
+            </div>
+            <p class="vllm-loading-hint" id="vllmLoadingHint">This may take 30-60 seconds on first load</p>
+        </div>
+    </div>
+
+    <div class="sim-wrapper" id="simWrapper" style="display:none;">
 
         <!-- ══════════════════ SCREEN 1: DASHBOARD ══════════════════ -->
         <div id="screen-landing" class="screen active" role="main">
@@ -338,6 +357,12 @@ IV heparin bolus
         <div class="lightbox-overlay" id="lightboxOverlay" role="dialog" aria-modal="true" aria-label="Imaging viewer">
             <div class="lightbox-header">
                 <div class="lightbox-title" id="lbTitle">Imaging Study</div>
+                <div class="lightbox-zoom-controls">
+                    <button class="zoom-btn" onclick="zoomOut()" aria-label="Zoom out">&minus;</button>
+                    <span class="zoom-level" id="zoomLevel">100%</span>
+                    <button class="zoom-btn" onclick="zoomIn()" aria-label="Zoom in">&plus;</button>
+                    <button class="zoom-reset-btn" onclick="zoomReset()" aria-label="Reset zoom">Reset</button>
+                </div>
                 <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close viewer">&#10005;</button>
             </div>
 
@@ -530,9 +555,67 @@ IV heparin bolus
             }
         }
 
+        // ── vLLM Readiness Check ──
+        let vllmReady = false;
+        let vllmCheckInterval = null;
+
+        async function checkVllmReadiness() {
+            try {
+                const res = await fetch('/api/health');
+                const data = await res.json();
+
+                if (data.vllm_ready || data.vllm_mode === 'simulated') {
+                    vllmReady = true;
+                    hideVllmLoading();
+                    return true;
+                }
+
+                // Trigger warmup if not started
+                if (!data.vllm_warming_up) {
+                    await fetch('/api/vllm/warmup', { method: 'POST' });
+                }
+                return false;
+            } catch (e) {
+                console.error('vLLM health check failed:', e);
+                // Fail open - allow usage even if health check fails
+                vllmReady = true;
+                hideVllmLoading();
+                return true;
+            }
+        }
+
+        function showVllmLoading() {
+            document.getElementById('vllmLoading').classList.remove('hidden');
+            document.getElementById('simWrapper').style.display = 'none';
+        }
+
+        function hideVllmLoading() {
+            document.getElementById('vllmLoading').classList.add('hidden');
+            document.getElementById('simWrapper').style.display = 'block';
+            if (vllmCheckInterval) {
+                clearInterval(vllmCheckInterval);
+                vllmCheckInterval = null;
+            }
+        }
+
+        function waitForVllmAndLoad() {
+            // Show loading screen immediately
+            showVllmLoading();
+
+            // Check immediately
+            checkVllmReadiness().then(ready => {
+                if (!ready) {
+                    // Poll every 2 seconds until ready
+                    vllmCheckInterval = setInterval(() => {
+                        checkVllmReadiness();
+                    }, 2000);
+                }
+            });
+        }
+
         // ── Load cases ──
         document.addEventListener('DOMContentLoaded', () => {
-            loadCases();
+            waitForVllmAndLoad();
         });
 
         async function checkConnectionStatus() {
@@ -810,11 +893,29 @@ IV heparin bolus
                 card.className = 'imaging-card';
                 card.id = `img-card-${study.study_id}`;
                 card.setAttribute('tabindex', '0');
-                card.innerHTML = `
-                    <div class="imaging-icon">${icon}</div>
-                    <div class="imaging-modality">${escapeHtml(study.modality)}</div>
-                    <div class="imaging-desc">${escapeHtml(study.description)}</div>
-                `;
+
+                // Check if we have a preview image (thumbnail or file_path)
+                const hasPreview = study.thumbnail || (study.file_path && study.file_path.startsWith('http'));
+                const previewUrl = study.thumbnail || study.file_path || '';
+
+                if (hasPreview) {
+                    // Show image preview with modality badge
+                    card.innerHTML = `
+                        <div class="imaging-preview">
+                            <img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(study.modality)}" loading="lazy" />
+                        </div>
+                        <div class="imaging-modality-badge">${escapeHtml(study.modality)}</div>
+                        <div class="imaging-desc">${escapeHtml(study.description)}</div>
+                    `;
+                } else {
+                    // Show modality icon (no preview available)
+                    card.innerHTML = `
+                        <div class="imaging-icon">${icon}</div>
+                        <div class="imaging-modality">${escapeHtml(study.modality)}</div>
+                        <div class="imaging-desc">${escapeHtml(study.description)}</div>
+                    `;
+                }
+
                 const openStudy = () => openImagingStudy(study.study_id);
                 card.onclick = openStudy;
                 card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openStudy(); } };
@@ -843,6 +944,7 @@ IV heparin bolus
 
             document.getElementById('lbContrast').value = 100;
             document.getElementById('lbBrightness').value = 100;
+            currentZoom = 100;  // Reset zoom when opening new image
 
             const body = document.getElementById('lbBody');
             body.innerHTML = '';
@@ -916,15 +1018,18 @@ IV heparin bolus
                         svgEl.style.width = '100%';
                         svgEl.style.height = 'auto';
                     }
+                    setTimeout(() => initImagePan(), 100);
                 } catch (e) {
                     body.innerHTML = `<img src="${data.image_url}" id="lbImage" alt="Imaging Study">`;
                 }
                 document.getElementById('lightboxOverlay').classList.add('active');
                 document.body.style.overflow = 'hidden';
+                setTimeout(() => initImagePan(), 100);
             } else {
                 body.innerHTML = `<img src="${data.image_url}" id="lbImage" alt="Imaging Study">`;
                 document.getElementById('lightboxOverlay').classList.add('active');
                 document.body.style.overflow = 'hidden';
+                setTimeout(() => initImagePan(), 100);
             }
         }
 
@@ -934,6 +1039,7 @@ IV heparin bolus
             document.getElementById('lbBody').innerHTML = '';
             const ctrl = document.getElementById('lbContrast');
             if (ctrl) ctrl.closest('.lightbox-controls').style.display = '';
+            currentZoom = 100;  // Reset zoom when closing
         }
 
         function toggleFindings() {
@@ -943,12 +1049,186 @@ IV heparin bolus
             btn.textContent = text.classList.contains('show') ? 'Hide Interpretation' : 'Interpret Findings';
         }
 
+        // ── Lightbox Zoom ──
+        let currentZoom = 100;
+        const ZOOM_STEP = 25;
+        const MIN_ZOOM = 25;
+        const MAX_ZOOM = 500;
+        let isDragging = false;
+        let startX, startY, translateX = 0, translateY = 0;
+
+        function updateZoomDisplay() {
+            const zoomDisplay = document.getElementById('zoomLevel');
+            if (zoomDisplay) {
+                zoomDisplay.textContent = `${currentZoom}%`;
+            }
+        }
+
+        function applyZoom() {
+            const lbBody = document.getElementById('lbBody');
+            if (!lbBody) return;
+            const img = lbBody.querySelector('img, svg');
+            if (!img) return;
+
+            // Enable panning when zoomed in
+            if (currentZoom > 100) {
+                img.style.cursor = 'grab';
+                lbBody.style.overflow = 'hidden';
+            } else {
+                img.style.cursor = 'default';
+                lbBody.style.overflow = 'auto';
+                translateX = 0;
+                translateY = 0;
+            }
+
+            img.style.transform = `scale(${currentZoom / 100}) translate(${translateX}px, ${translateY}px)`;
+            img.style.transformOrigin = 'center center';
+            img.style.transition = isDragging ? 'none' : 'transform 0.15s ease';
+            updateZoomDisplay();
+        }
+
+        function zoomIn() {
+            if (currentZoom < MAX_ZOOM) {
+                currentZoom = Math.min(MAX_ZOOM, currentZoom + ZOOM_STEP);
+                applyZoom();
+            }
+        }
+
+        function zoomOut() {
+            if (currentZoom > MIN_ZOOM) {
+                currentZoom = Math.max(MIN_ZOOM, currentZoom - ZOOM_STEP);
+                applyZoom();
+            }
+        }
+
+        function zoomReset() {
+            currentZoom = 100;
+            translateX = 0;
+            translateY = 0;
+            applyZoom();
+        }
+
+        // Pan functionality for zoomed images
+        function initImagePan() {
+            const lbBody = document.getElementById('lbBody');
+            if (!lbBody) return;
+            const img = lbBody.querySelector('img, svg');
+            if (!img) return;
+
+            // Remove any existing transition for instant response during drag
+            img.style.transition = 'none';
+
+            // Calculate pan boundaries based on zoom level and image/container size
+            function getPanLimits() {
+                const containerWidth = lbBody.clientWidth;
+                const containerHeight = lbBody.clientHeight;
+                const imgWidth = img.offsetWidth * (currentZoom / 100);
+                const imgHeight = img.offsetHeight * (currentZoom / 100);
+
+                return {
+                    minX: imgWidth <= containerWidth ? 0 : -(imgWidth - containerWidth) / 2,
+                    maxX: imgWidth <= containerWidth ? 0 : (imgWidth - containerWidth) / 2,
+                    minY: imgHeight <= containerHeight ? 0 : -(imgHeight - containerHeight) / 2,
+                    maxY: imgHeight <= containerHeight ? 0 : (imgHeight - containerHeight) / 2
+                };
+            }
+
+            function clampPan() {
+                const limits = getPanLimits();
+                translateX = Math.max(limits.minX, Math.min(limits.maxX, translateX));
+                translateY = Math.max(limits.minY, Math.min(limits.maxY, translateY));
+            }
+
+            img.addEventListener('mousedown', (e) => {
+                if (currentZoom <= 100) return;
+                isDragging = true;
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+                img.style.cursor = 'grabbing';
+                img.style.transition = 'none';  // Ensure no transition during drag
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging || currentZoom <= 100) return;
+                e.preventDefault();
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                clampPan();  // Keep pan within bounds
+                img.style.transform = `scale(${currentZoom / 100}) translate(${translateX}px, ${translateY}px)`;
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    const imgEl = lbBody.querySelector('img, svg');
+                    if (imgEl) {
+                        imgEl.style.cursor = 'grab';
+                        imgEl.style.transition = 'transform 0.15s ease';  // Re-enable transition
+                    }
+                }
+            });
+
+            // Touch support for mobile
+            img.addEventListener('touchstart', (e) => {
+                if (currentZoom <= 100) return;
+                isDragging = true;
+                const touch = e.touches[0];
+                startX = touch.clientX - translateX;
+                startY = touch.clientY - translateY;
+                img.style.transition = 'none';
+            }, { passive: true });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!isDragging || currentZoom <= 100) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                translateX = touch.clientX - startX;
+                translateY = touch.clientY - startY;
+                clampPan();  // Keep pan within bounds
+                img.style.transform = `scale(${currentZoom / 100}) translate(${translateX}px, ${translateY}px)`;
+            }, { passive: true });
+
+            document.addEventListener('touchend', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    const imgEl = lbBody.querySelector('img, svg');
+                    if (imgEl) {
+                        imgEl.style.transition = 'transform 0.15s ease';
+                    }
+                }
+            });
+        }
+
+        // Keyboard shortcuts for zoom
+        document.addEventListener('keydown', (e) => {
+            // Only handle zoom shortcuts when lightbox is open
+            if (!document.getElementById('lightboxOverlay').classList.contains('active')) return;
+
+            // Ctrl/Cmd + for zoom in
+            if ((e.ctrlKey || e.metaKey) && e.key === '+') {
+                e.preventDefault();
+                zoomIn();
+            }
+            // Ctrl/Cmd - for zoom out
+            if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+                e.preventDefault();
+                zoomOut();
+            }
+            // Ctrl/Cmd 0 for reset
+            if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+                e.preventDefault();
+                zoomReset();
+            }
+        });
+
         function updateLbFilters() {
             const img = document.getElementById('lbBody').querySelector('img, svg');
             if (!img) return;
             const c = document.getElementById('lbContrast').value;
             const b = document.getElementById('lbBrightness').value;
+            // Preserve zoom transform while updating filters
             img.style.filter = `contrast(${c}%) brightness(${b}%)`;
+            img.style.transform = `scale(${currentZoom / 100})`;
         }
 
         // ── Timer ──
