@@ -215,12 +215,6 @@ async def simulation_page(request: Request):
     return templates.TemplateResponse("simulation.html", {"request": request})
 
 
-@app.get("/offline", response_class=HTMLResponse)
-async def offline_page(request: Request):
-    """Offline fallback page for PWA."""
-    return templates.TemplateResponse("offline.html", {"request": request})
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # Health & Readiness endpoints
 # ══════════════════════════════════════════════════════════════════════════════
