@@ -562,10 +562,15 @@ IV heparin bolus
 
             // Check immediately
             checkVllmReadiness().then(ready => {
-                if (!ready) {
+                if (ready) {
+                    loadCases();
+                } else {
                     // Poll every 2 seconds until ready
-                    vllmCheckInterval = setInterval(() => {
-                        checkVllmReadiness();
+                    vllmCheckInterval = setInterval(async () => {
+                        const isReady = await checkVllmReadiness();
+                        if (isReady) {
+                            loadCases();
+                        }
                     }, 2000);
                 }
             });
