@@ -365,6 +365,8 @@ MedSimulation/
 
 - **Multi-Agent Scoring Panel**: Runs 3 specialist agents in parallel instead of a single senior clinician call — a Clinician agent (medical accuracy), a Teacher agent (reasoning order: history before exam before diagnosis), and a Patient Safety agent (flags dangerous omissions such as missed sepsis workup or delayed imaging). Scores are aggregated for the final result.
 
+- **Patient Persona Fine-tuning**: Fine-tune MedGemma on synthetic patient dialogue to make responses more consistent and intuitive (temporal anchoring, no medical jargon, natural language). Current prompt-based approach uses ~400 tokens; fine-tuned model could work with ~80 tokens. Training data: generate 100-200 Q&A pairs using Claude, then LoRA fine-tune (~$50-100 on RunPod).
+
 ## 📱 Mobile App (MedSimulation-App)
 
 A React Native mobile application providing on-the-go clinical simulation training.
