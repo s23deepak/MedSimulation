@@ -350,12 +350,13 @@ class VLLMService:
 # ── Web Application (FastAPI + VLLMService) ─────────────────────────────────────
 
 @app.function(
-    gpu="A10G",
+    gpu=None,  # No GPU needed - just proxies to VLLMService
+    cpu=2,     # 2 vCPUs sufficient for FastAPI proxy
+    memory=1024,  # 1GB RAM
     scaledown_window=300,  # Shut down after 5 min idle
     timeout=600,
     volumes={
-        "/data": data_volume,
-        "/models": model_volume,
+        "/data": data_volume,  # Only need data volume for DB/imaging
     },
     image=image,
     secrets=[
