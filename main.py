@@ -54,6 +54,25 @@ vllm_ready = False  # Track vLLM readiness
 vllm_warming_up = False  # Track if warmup is in progress
 
 
+# ── Context-aware logging ─────────────────────────────────────────────────────
+
+def log_with_context(message: str, session_id: str = None, case_id: str = None, **extra):
+    """Log a message with optional session/case context for traceability."""
+    context_parts = []
+    if session_id:
+        context_parts.append(f"session={session_id}")
+    if case_id:
+        context_parts.append(f"case={case_id}")
+    for k, v in extra.items():
+        if v is not None:
+            context_parts.append(f"{k}={v}")
+
+    if context_parts:
+        logger.info(f"{message} [{', '.join(context_parts)}]")
+    else:
+        logger.info(message)
+
+
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 from contextlib import asynccontextmanager
@@ -270,8 +289,10 @@ async def api_sim_start(payload: dict):
         raise HTTPException(status_code=400, detail="case_id is required")
     try:
         session = simulation_engine.start_session(resident_name, case_id)
+        log_with_context("Session started", session_id=session.session_id, case_id=case_id)
         return JSONResponse(content=session.to_dict())
     except ValueError as e:
+        log_with_context("Session start failed", case_id=case_id, error=str(e))
         raise HTTPException(status_code=404, detail=str(e))
 
 
@@ -297,7 +318,8 @@ async def api_sim_history(payload: dict):
         raise HTTPException(status_code=400, detail="question is required")
     try:
         result = simulation_engine.ask_history(session_id, question)
-        
+        log_with_context("History question", session_id=session_id, question=question[:50])
+
         # Phase E: Generate Audio if we have an OpenAI API Key
         import os
         from src.simulation.media import generate_patient_voice
@@ -307,20 +329,21 @@ async def api_sim_history(payload: dict):
             if session:
                 client = AsyncOpenAI(api_key=openai_key)
                 text = result.get("response", "")
-                
+
                 # Try to extract sex from presentation
                 sex = "U"
                 if "female" in session.case.presentation.lower() or "woman" in session.case.presentation.lower():
                     sex = "F"
                 elif "male" in session.case.presentation.lower() or "man" in session.case.presentation.lower():
                     sex = "M"
-                    
+
                 audio_url = await generate_patient_voice(client, text, sex)
                 if audio_url:
                     result["audio_url"] = audio_url
-                    
+
         return JSONResponse(content=result)
     except ValueError as e:
+        log_with_context("History question failed", session_id=session_id, error=str(e))
         raise HTTPException(status_code=404, detail=str(e))
 
 
@@ -337,8 +360,10 @@ async def api_sim_exam(payload: dict):
         raise HTTPException(status_code=400, detail="system is required")
     try:
         result = simulation_engine.view_exam(session_id, system)
+        log_with_context("Exam requested", session_id=session_id, system=system)
         return JSONResponse(content=result)
     except ValueError as e:
+        log_with_context("Exam failed", session_id=session_id, system=system, error=str(e))
         raise HTTPException(status_code=404, detail=str(e))
 
 
@@ -355,8 +380,10 @@ async def api_sim_investigate(payload: dict):
         raise HTTPException(status_code=400, detail="investigation is required")
     try:
         result = simulation_engine.order_investigation(session_id, investigation)
+        log_with_context("Investigation ordered", session_id=session_id, investigation=investigation)
         return JSONResponse(content=result)
     except ValueError as e:
+        log_with_context("Investigation failed", session_id=session_id, investigation=investigation, error=str(e))
         raise HTTPException(status_code=404, detail=str(e))
 
 
@@ -373,8 +400,10 @@ async def api_sim_imaging(payload: dict):
         raise HTTPException(status_code=400, detail="study_id is required")
     try:
         result = simulation_engine.view_imaging(session_id, study_id)
+        log_with_context("Imaging viewed", session_id=session_id, study_id=study_id)
         return JSONResponse(content=result)
     except ValueError as e:
+        log_with_context("Imaging failed", session_id=session_id, study_id=study_id, error=str(e))
         raise HTTPException(status_code=404, detail=str(e))
 
 
@@ -385,15 +414,29 @@ async def api_sim_submit(payload: dict):
     Body: { "session_id": str, "diagnosis": str, "management": list[str] }
     Returns full score + debrief object.
     """
+    global vllm_ready
+
     session_id = payload.get("session_id", "")
     diagnosis = payload.get("diagnosis", "").strip()
     management = payload.get("management", [])
+
     if not diagnosis:
         raise HTTPException(status_code=400, detail="diagnosis is required")
+
+    # Block submission until vLLM is ready (prevents 400 errors during warmup)
+    if vllm_client is not None and not vllm_ready:
+        log_with_context("Submission blocked - vLLM not ready", session_id=session_id)
+        raise HTTPException(
+            status_code=503,
+            detail="AI model is still warming up. Please wait 30-60 seconds and try again."
+        )
+
     try:
         result = simulation_engine.submit_assessment(session_id, diagnosis, management)
+        log_with_context("Assessment submitted", session_id=session_id, diagnosis=diagnosis[:50])
         return JSONResponse(content=result)
     except ValueError as e:
+        log_with_context("Assessment failed", session_id=session_id, error=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
 
