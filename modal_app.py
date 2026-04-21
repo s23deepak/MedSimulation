@@ -265,10 +265,10 @@ class VLLMService:
         # These are harmless but noisy - see GitHub issues for vLLM/PyTorch
         env = {
             **os.environ,
-            "TORCH_LOGS": "warning",  # Valid setting: suppress info/debug logs
             "NCCL_DEBUG": "WARN",     # Suppress NCCL info/debug logs
         }
-
+         # Explicitly remove TORCH_LOGS if inherited from environment
+        env.pop("TORCH_LOGS", None)
         print(f"vLLM cmd: {' '.join(cmd)}")
         self.vllm_proc = subprocess.Popen(cmd, env=env)
         wait_for_vllm(VLLM_PORT, timeout=300)
