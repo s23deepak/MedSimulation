@@ -251,6 +251,24 @@ class SimulationEngine:
         Triggers scoring and debrief generation.
         """
         session = self._get_active_session(session_id)
+
+        # Validate minimum clinical workup before allowing submission
+        min_history_questions = 3
+        min_exam_systems = 0
+
+        if len(session.history_questions) < min_history_questions:
+            raise ValueError(
+                f"Insufficient history taking. Please ask at least {min_history_questions} questions "
+                f"before submitting (you asked {len(session.history_questions)}). "
+                "Good clinical practice requires adequate history before diagnosis."
+            )
+
+        if len(session.exam_systems_viewed) < min_exam_systems:
+            raise ValueError(
+                f"Please perform physical examination before submitting. "
+                f"Examine at least {min_exam_systems} system(s) relevant to the case."
+            )
+
         session.diagnosis_submitted = diagnosis
         session.management_submitted = management
         session.status = "submitted"

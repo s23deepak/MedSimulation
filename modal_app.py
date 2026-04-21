@@ -257,10 +257,20 @@ class VLLMService:
             "--max-num-seqs", "16",
             "--max-num-batched-tokens", "4096",
             "--served-model-name", "medgemma",
+            "--disable-custom-all-reduce",  # Reduces NCCL noise
+            "--enable-prefix-caching",      # RadixAttention for KV cache reuse
         ]
 
+        # Suppress PyTorch distributed warnings (NCCL heartbeat, TCPStore)
+        # These are harmless but noisy - see GitHub issues for vLLM/PyTorch
+        env = {
+            **os.environ,
+            "TORCH_LOGS": "error",  # Only show errors, not warnings
+            "NCCL_DEBUG": "WARN",   # Suppress NCCL info/debug logs
+        }
+
         print(f"vLLM cmd: {' '.join(cmd)}")
-        self.vllm_proc = subprocess.Popen(cmd)
+        self.vllm_proc = subprocess.Popen(cmd, env=env)
         wait_for_vllm(VLLM_PORT, timeout=300)
         print("vLLM server ready")
         warmup_vllm(VLLM_PORT)

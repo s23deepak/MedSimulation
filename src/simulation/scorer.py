@@ -156,6 +156,20 @@ def _ai_score(session: Any, agent: Any) -> ScoreResult:
         else:
             feedback_text = ""
 
+        # Validate AI output - reject code snippets or garbage
+        if feedback_text:
+            # Check for code-like output (Python keywords, def statements, etc.)
+            code_indicators = ["def ", "import ", "print(", "```python", "```", "    # ", ":\"\"\"", ":'''"]
+            is_code = any(indicator in feedback_text for indicator in code_indicators)
+
+            # Check for minimum meaningful content (at least 50 chars and contains sentences)
+            is_too_short = len(feedback_text.strip()) < 50
+            has_sentences = "." in feedback_text or "!" in feedback_text
+
+            if is_code or is_too_short or not has_sentences:
+                logger.warning("AI feedback rejected (garbage output): %s...", feedback_text[:100])
+                feedback_text = ""  # Fall back to rule-based only
+
         if feedback_text:
             numeric = _rule_based_score(session)
             return ScoreResult(
