@@ -265,8 +265,8 @@ class VLLMService:
         # These are harmless but noisy - see GitHub issues for vLLM/PyTorch
         env = {
             **os.environ,
-            "TORCH_LOGS": "error",  # Only show errors, not warnings
-            "NCCL_DEBUG": "WARN",   # Suppress NCCL info/debug logs
+            "TORCH_LOGS": "warning",  # Valid setting: suppress info/debug logs
+            "NCCL_DEBUG": "WARN",     # Suppress NCCL info/debug logs
         }
 
         print(f"vLLM cmd: {' '.join(cmd)}")
