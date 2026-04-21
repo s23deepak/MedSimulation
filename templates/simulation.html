@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css?v=6">
+    <link rel="stylesheet" href="/static/styles.css?v=7">
 </head>
 
 <body>
@@ -1368,13 +1368,156 @@ IV heparin bolus
                 const data = await res.json();
 
                 if (timerInterval) clearInterval(timerInterval);
-                showResults(data);
+
+                // Show scores immediately
+                showResultsProgressive(data);
+
+                // Start polling for AI feedback
+                if (!data.ai_ready) {
+                    pollForAiFeedback(currentSession.session_id);
+                }
             } catch (err) {
                 showToast('Submission failed: ' + err.message, 'error');
             } finally {
                 btn.disabled = false;
                 document.getElementById('submitSpinner').classList.remove('show');
             }
+        }
+
+        let aiPollInterval = null;
+
+        async function pollForAiFeedback(sessionId) {
+            // Show loading state for AI feedback
+            const aiBlock = document.getElementById('aiFeedbackBlock');
+            const aiNarrativeBlock = document.getElementById('aiNarrativeBlock');
+
+            if (aiBlock) {
+                aiBlock.style.display = 'block';
+                document.getElementById('aiFeedbackText').innerHTML = `
+                    <div class="ai-loading">
+                        <span class="spinner-dot"></span>
+                        <span>Generating AI feedback...</span>
+                    </div>
+                `;
+            }
+
+            // Poll every 800ms until AI feedback is ready
+            aiPollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/simulation/session/${sessionId}/status`);
+                    if (!res.ok) {
+                        clearInterval(aiPollInterval);
+                        return;
+                    }
+                    const data = await res.json();
+
+                    if (data.ai_ready) {
+                        clearInterval(aiPollInterval);
+
+                        // Update AI feedback
+                        if (data.ai_feedback && aiBlock) {
+                            document.getElementById('aiFeedbackText').innerHTML = formatAiFeedback(data.ai_feedback);
+                        }
+
+                        // Update AI narrative
+                        if (data.debrief && data.debrief.ai_narrative && aiNarrativeBlock) {
+                            aiNarrativeBlock.style.display = 'block';
+                            document.getElementById('aiNarrativeText').innerHTML = formatAiFeedback(data.debrief.ai_narrative);
+                        }
+
+                        // Update debrief summary
+                        if (data.debrief && data.debrief.summary) {
+                            document.getElementById('debriefSummary').textContent = data.debrief.summary;
+                        }
+
+                        // Update coaching points
+                        if (data.debrief && data.debrief.coaching_points) {
+                            const cp = document.getElementById('coachingPoints');
+                            if (cp) {
+                                cp.innerHTML = data.debrief.coaching_points.map(p =>
+                                    `<div class="learning-point"><span class="lp-icon">💡</span><span>${escapeHtml(p)}</span></div>`
+                                ).join('');
+                            }
+                        }
+
+                        // Fade in the AI sections
+                        aiBlock.classList.add('ai-loaded');
+                        if (aiNarrativeBlock) aiNarrativeBlock.classList.add('ai-loaded');
+                    }
+                } catch (err) {
+                    console.error('Polling error:', err);
+                    clearInterval(aiPollInterval);
+                }
+            }, 800);
+        }
+
+        // ── Progressive Results display ──
+        function showResultsProgressive(data) {
+            const scores = data.scores;
+            const debrief = data.debrief || {};
+
+            document.getElementById('resultsTitle').textContent = `Case Debrief — ${currentSession.case_title}`;
+
+            // Score circle animation
+            const scoreCircle = document.getElementById('scoreCircle');
+            scoreCircle.style.setProperty('--pct', '0');
+            document.getElementById('scoreNumber').textContent = `${scores.percentage}%`;
+            document.getElementById('scoreLabel').textContent = `${scores.total} / ${scores.max_score}`;
+
+            // Animate score circle after a brief delay
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    scoreCircle.style.setProperty('--pct', scores.percentage);
+                });
+            });
+
+            const gb = document.getElementById('gradeBadge');
+            gb.textContent = scores.grade;
+            gb.className = `grade-badge grade-${scores.grade}`;
+
+            document.getElementById('scoreResidentName').textContent = `Resident: ${currentSession.resident_name}`;
+
+            // Domain grid
+            const dg = document.getElementById('domainGrid');
+            dg.innerHTML = '';
+            const domainNames = { history: 'History', exam: 'Examination', investigations: 'Investigations', diagnosis: 'Diagnosis', management: 'Management' };
+            Object.entries(scores.domain_scores).forEach(([key, val]) => {
+                const w = key === 'history' ? 20 : key === 'exam' ? 20 : key === 'investigations' ? 20 : key === 'diagnosis' ? 25 : 15;
+                dg.innerHTML += `<div class="domain-card"><div class="domain-name">${domainNames[key] || key}</div><div class="domain-score">${val}/${w}</div><div class="domain-fb">${escapeHtml(scores.domain_feedback[key] || '')}</div></div>`;
+            });
+
+            // Correct diagnosis + management
+            document.getElementById('correctDiagnosis').textContent = scores.correct_diagnosis;
+            document.getElementById('correctManagement').innerHTML = scores.correct_management.map(m => `<div class="mgmt-item">✓ ${escapeHtml(m)}</div>`).join('');
+
+            // AI feedback - will be filled by polling
+            const aiBlock = document.getElementById('aiFeedbackBlock');
+            if (aiBlock) {
+                aiBlock.style.display = 'block';
+                if (!scores.ai_feedback) {
+                    // Placeholder - polling will fill this
+                    document.getElementById('aiFeedbackText').innerHTML = '';
+                }
+            }
+
+            // AI narrative - hidden until ready
+            const aiNarrativeBlock = document.getElementById('aiNarrativeBlock');
+            if (aiNarrativeBlock) {
+                aiNarrativeBlock.style.display = 'none';
+            }
+
+            // Debrief summary
+            document.getElementById('debriefSummary').textContent = debrief.summary || '';
+
+            // Learning points
+            const lp = document.getElementById('learningPoints');
+            lp.innerHTML = (scores.key_learning_points || []).map(p => `<div class="learning-point"><span class="lp-icon">→</span><span>${escapeHtml(p)}</span></div>`).join('');
+
+            // Coaching points - cleared, will be filled by polling
+            const cp = document.getElementById('coachingPoints');
+            if (cp) cp.innerHTML = '';
+
+            showScreen('screen-results');
         }
 
         // ── Results display ──

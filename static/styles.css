@@ -2129,6 +2129,37 @@ select:focus:not(:focus-visible) {
     padding-left: 1rem;
 }
 
+/* AI loading state */
+.ai-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    padding: 0.5rem 0;
+}
+
+.ai-loading .spinner-dot {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* Fade-in animation for AI feedback */
+#aiFeedbackBlock,
+#aiNarrativeBlock {
+    opacity: 0;
+    transition: opacity 0.4s ease-in-out;
+}
+
+#aiFeedbackBlock.ai-loaded,
+#aiNarrativeBlock.ai-loaded {
+    opacity: 1;
+}
+
 /* ── Landing header (unused but kept for compat) ───────────────────────────── */
 .landing-header {
     text-align: center;

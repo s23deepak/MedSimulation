@@ -412,7 +412,7 @@ async def api_sim_submit(payload: dict):
     """
     Resident submits diagnosis and management for scoring.
     Body: { "session_id": str, "diagnosis": str, "management": list[str] }
-    Returns full score + debrief object.
+    Returns scores immediately, AI feedback streams in asynchronously.
     """
     global vllm_ready
 
@@ -432,12 +432,40 @@ async def api_sim_submit(payload: dict):
         )
 
     try:
-        result = simulation_engine.submit_assessment(session_id, diagnosis, management)
-        log_with_context("Assessment submitted", session_id=session_id, diagnosis=diagnosis[:50])
+        # Use async scoring - returns immediately with rule-based scores
+        result = simulation_engine.submit_assessment(
+            session_id, diagnosis, management, wait_for_ai=False
+        )
+        log_with_context("Assessment submitted (async)", session_id=session_id, diagnosis=diagnosis[:50])
         return JSONResponse(content=result)
     except ValueError as e:
         log_with_context("Assessment failed", session_id=session_id, error=str(e))
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/simulation/session/{session_id}/status")
+async def api_sim_status(session_id: str):
+    """
+    Polling endpoint for AI feedback status.
+    Returns current scoring state - call this repeatedly until ai_ready=True.
+    """
+    session = simulation_engine.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Check if AI feedback is ready
+    ai_ready = not getattr(session, "ai_pending", False)
+    ai_feedback = session.score.get("ai_feedback", "") if session.score else ""
+    debrief = session.debrief if hasattr(session, "debrief") and session.debrief else None
+
+    return JSONResponse(content={
+        "session_id": session_id,
+        "status": session.status,
+        "ai_ready": ai_ready,
+        "ai_feedback": ai_feedback if ai_ready else "",
+        "debrief": debrief if ai_ready else {"status": "generating"},
+        "scores": session.score if session.score else None,
+    })
 
 
 @app.get("/api/simulation/session/{session_id}/debrief")
