@@ -59,6 +59,8 @@ def clear_session_history(session_id: str) -> None:
 _PATIENT_SYSTEM = """\
 You are roleplaying as a patient in a medical simulation for resident education.
 
+Current date: {current_date}
+
 Patient background:
 {case_presentation}
 
@@ -72,6 +74,7 @@ Rules:
 - Show appropriate distress matching the presentation.
 - Do NOT use medical or anatomical terms - describe symptoms as an ordinary person would.
 - Keep responses to 2-4 sentences.
+- When discussing timing of symptoms, reference the current date above and be temporally consistent.
 
 Examples of how to respond:
 
@@ -88,11 +91,17 @@ Resident: "What medications do you take?"
 Patient: "Just my blood pressure pill - lisinopril, I think 10mg? Take it every morning."
 """
 
+from datetime import datetime
+
 _PATIENT_PROMPT = ChatPromptTemplate.from_messages([
     ("system", _PATIENT_SYSTEM),
     MessagesPlaceholder(variable_name="history"),   # ← prior turns injected here
     ("human", "{question}"),
 ])
+
+def _get_current_date() -> str:
+    """Return current date in readable format for patient context."""
+    return datetime.now().strftime("%A, %B %d, %Y")
 
 
 # ── LangChain Runnable wrapping MedGemma ─────────────────────────────────────
@@ -207,6 +216,7 @@ def build_patient_chain(agent: Any) -> RunnableWithMessageHistory:
     - Appends the patient's reply as an AIMessage to the session history.
     - Re-injects all prior turns on every subsequent call so the patient
       persona remains consistent across the entire session.
+    - Injects current date for temporal consistency in patient responses.
     """
     chain = _PATIENT_PROMPT | MedGemmaRunnable(agent)
     return RunnableWithMessageHistory(
@@ -214,4 +224,7 @@ def build_patient_chain(agent: Any) -> RunnableWithMessageHistory:
         get_session_history,
         input_messages_key="question",
         history_messages_key="history",
+        override_input={
+            "current_date": _get_current_date(),
+        },
     )
