@@ -751,9 +751,18 @@ IV heparin bolus
                 vg.appendChild(item);
             });
 
-            // Chat reset
+            // Chat reset - load existing history if present
             const cm = document.getElementById('chatMessages');
             cm.innerHTML = `<div class="msg msg-patient"><div class="msg-label">Patient</div><div class="msg-bubble">Hello, doctor. I'm not feeling well at all. Please help me.</div></div>`;
+
+            // Load existing history questions (for page refresh / reconnection)
+            if (s.history_questions && s.history_questions.length > 0) {
+                s.history_questions.forEach(h => {
+                    cm.innerHTML += `<div class="msg msg-resident"><div class="msg-label">You (Doctor)</div><div class="msg-bubble">${escapeHtml(h.question)}</div></div>`;
+                    cm.innerHTML += `<div class="msg msg-patient"><div class="msg-label">Patient${h.ai ? ' (AI)' : ''}</div><div class="msg-bubble">${escapeHtml(h.response)}</div></div>`;
+                });
+                cm.scrollTop = cm.scrollHeight;
+            }
 
             // Quick questions
             const qq = document.getElementById('quickQuestions');
@@ -784,9 +793,21 @@ IV heparin bolus
             document.getElementById('diagnosisInput').value = '';
             document.getElementById('managementInput').value = '';
             document.getElementById('notesArea').value = '';
-            allResults.length = 0;
-            document.getElementById('resultCount').textContent = '0';
-            document.getElementById('resultsList').innerHTML = '<p class="empty-text">No results yet.</p>';
+
+            // Restore investigation results if session has them
+            const rl = document.getElementById('resultsList');
+            if (s.investigations_ordered && s.investigations_ordered.length > 0) {
+                allResults.length = 0;
+                // Note: We can only show count, not full results since results aren't stored in session
+                document.getElementById('resultCount').textContent = s.investigations_ordered.length;
+                rl.innerHTML = s.investigations_ordered.map(inv =>
+                    `<div class="result-item"><div class="result-name">${escapeHtml(inv)}</div><div class="result-value text-muted">(result from earlier)</div></div>`
+                ).join('');
+            } else {
+                allResults.length = 0;
+                document.getElementById('resultCount').textContent = '0';
+                rl.innerHTML = '<p class="empty-text">No results yet.</p>';
+            }
         }
 
         function setupExamSystems() {
@@ -809,6 +830,10 @@ IV heparin bolus
                 btn.textContent = sys;
                 btn.id = `exam-${sys.replace(/\s+/g, '-').toLowerCase()}`;
                 btn.onclick = () => examSystem(sys, btn);
+                // Mark already-viewed systems
+                if (s.exam_systems_viewed && s.exam_systems_viewed.includes(sys)) {
+                    btn.classList.add('done');
+                }
                 sg.appendChild(btn);
             });
         }
@@ -823,6 +848,11 @@ IV heparin bolus
                 btn.textContent = inv;
                 btn.id = `inv-${inv.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`;
                 btn.onclick = () => { document.getElementById('invInput').value = inv; orderInvestigation(); btn.classList.add('done'); };
+                // Mark already-ordered investigations
+                if (currentSession && currentSession.investigations_ordered &&
+                    currentSession.investigations_ordered.some(i => i.toLowerCase().includes(inv.toLowerCase()))) {
+                    btn.classList.add('done');
+                }
                 qi.appendChild(btn);
             });
         }
