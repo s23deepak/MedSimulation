@@ -49,11 +49,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     resident_name TEXT DEFAULT '',
     case_id TEXT,
+    session_data JSON,  -- Full session state (history, exam, investigations, etc.)
     score_data JSON,
     debrief_data JSON,
     status TEXT DEFAULT 'active',
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (case_id) REFERENCES cases(case_id)
 );
 
@@ -78,7 +80,26 @@ def _ensure_db() -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with _connect() as conn:
         conn.executescript(_SCHEMA)
+        # Run migrations for schema updates
+        _migrate_schema(conn)
     logger.info("Database initialized at %s", _DB_PATH)
+
+
+def _migrate_schema(conn) -> None:
+    """Run schema migrations for existing databases."""
+    # Check if sessions table has the new columns
+    cursor = conn.execute("PRAGMA table_info(sessions)")
+    columns = {row[1] for row in cursor.fetchall()}
+
+    # Add session_data column if missing
+    if "session_data" not in columns:
+        logger.info("Adding session_data column to sessions table")
+        conn.execute("ALTER TABLE sessions ADD COLUMN session_data JSON")
+
+    # Add updated_at column if missing
+    if "updated_at" not in columns:
+        logger.info("Adding updated_at column to sessions table")
+        conn.execute("ALTER TABLE sessions ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
 
 @contextmanager
@@ -252,27 +273,84 @@ def list_db_cases(
 # ── Session persistence ──────────────────────────────────────────────────────
 
 def save_session(session_data: dict) -> None:
-    """Save or update a simulation session in the database."""
+    """
+    Save or update a simulation session in the database.
+
+    Stores the full session state in session_data JSON column for complete
+    persistence across container restarts.
+    """
     _ensure_db()
+    import datetime
+    now = datetime.datetime.now().isoformat()
+
     with _connect() as conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO sessions
-                (session_id, resident_name, case_id, score_data, debrief_data,
-                 status, started_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (session_id, resident_name, case_id, session_data, score_data, debrief_data,
+                 status, started_at, completed_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session_data.get("session_id", ""),
                 session_data.get("resident_name", ""),
                 session_data.get("case_id", ""),
+                json.dumps(session_data),  # Full session state
                 json.dumps(session_data.get("score")) if session_data.get("score") else None,
                 json.dumps(session_data.get("debrief")) if session_data.get("debrief") else None,
                 session_data.get("status", "active"),
                 session_data.get("started_at", ""),
                 session_data.get("completed_at", ""),
+                now,
             ),
         )
+
+
+def load_session(session_id: str) -> dict | None:
+    """
+    Load a simulation session from the database by session_id.
+
+    Returns the full session_data dict if found, None otherwise.
+    """
+    _ensure_db()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT session_data FROM sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return json.loads(row["session_data"])
+
+
+def get_session_status(session_id: str) -> dict | None:
+    """
+    Get basic session status without full data.
+
+    Used for polling endpoints to check if AI feedback is ready.
+    """
+    _ensure_db()
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT session_id, status, score_data, debrief_data, updated_at
+            FROM sessions WHERE session_id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return {
+        "session_id": row["session_id"],
+        "status": row["status"],
+        "score": json.loads(row["score_data"]) if row["score_data"] else None,
+        "debrief": json.loads(row["debrief_data"]) if row["debrief_data"] else None,
+        "updated_at": row["updated_at"],
+    }
 
 # ── Bandit persistence ────────────────────────────────────────────────────────
 

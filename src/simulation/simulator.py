@@ -24,6 +24,7 @@ from .chat_chain import build_patient_chain, clear_session_history
 from .scorer import score_session
 from .debrief import generate_debrief
 from .imaging import get_image_url
+from .database import save_session, load_session
 
 logger = logging.getLogger(__name__)
 
@@ -102,11 +103,20 @@ class SimulationSession:
 # ── Simulator ─────────────────────────────────────────────────────────────────
 
 class SimulationEngine:
-    """Manages all active simulation sessions."""
+    """
+    Manages all active simulation sessions.
+
+    Uses hybrid storage:
+    - In-memory cache (_sessions) for active sessions
+    - Database persistence for cross-container state sharing
+
+    On Modal (serverless), containers are stateless, so we load from DB
+    on each request if the session isn't in memory.
+    """
 
     def __init__(self, agent=None):
         self.agent = agent
-        self._sessions: dict[str, SimulationSession] = {}
+        self._sessions: dict[str, SimulationSession] = {}  # In-memory cache
         self._chain = build_patient_chain(agent) if agent is not None else None
 
     def set_agent(self, agent) -> None:
@@ -126,6 +136,7 @@ class SimulationEngine:
             case=case,
         )
         self._sessions[session.session_id] = session
+        self._persist_session(session)
         logger.info(
             "Simulation session %s started for %s — case %s",
             session.session_id, resident_name, case_id,
@@ -133,7 +144,51 @@ class SimulationEngine:
         return session
 
     def get_session(self, session_id: str) -> SimulationSession | None:
-        return self._sessions.get(session_id)
+        # Try in-memory cache first
+        if session_id in self._sessions:
+            return self._sessions[session_id]
+
+        # Fall back to database (for cross-container requests)
+        session_data = load_session(session_id)
+        if session_data is None:
+            return None
+
+        # Reconstruct session from DB
+        case = get_case(session_data.get("case_id"))
+        if case is None:
+            logger.warning("Session %s references non-existent case %s", session_id, session_data.get("case_id"))
+            return None
+
+        session = SimulationSession(
+            session_id=session_data.get("session_id"),
+            resident_name=session_data.get("resident_name"),
+            case_id=session_data.get("case_id"),
+            case=case,
+        )
+        # Restore state
+        session.history_questions = session_data.get("history_questions", [])
+        session.exam_systems_viewed = session_data.get("exam_systems_viewed", [])
+        session.investigations_ordered = session_data.get("investigations_ordered", [])
+        session.imaging_studies_viewed = session_data.get("imaging_studies_viewed", [])
+        session.action_log = session_data.get("action_log", [])
+        session.diagnosis_submitted = session_data.get("diagnosis_submitted", "")
+        session.management_submitted = session_data.get("management_submitted", [])
+        session.score = session_data.get("score")
+        session.debrief = session_data.get("debrief")
+        session.status = session_data.get("status", "active")
+        session.started_at = session_data.get("started_at")
+        session.completed_at = session_data.get("completed_at")
+
+        # Cache in memory
+        self._sessions[session_id] = session
+        return session
+
+    def _persist_session(self, session: SimulationSession) -> None:
+        """Persist session state to database."""
+        try:
+            save_session(session.to_dict())
+        except Exception as e:
+            logger.warning("Failed to persist session %s: %s", session.session_id, e)
 
     # ── Interactions ───────────────────────────────────────────────────────────
 
@@ -174,6 +229,7 @@ class SimulationEngine:
         }
         session.history_questions.append(entry)
         session.action_log.append({"type": "history", "detail": question, "ts": entry["ts"]})
+        self._persist_session(session)
         return entry
 
     def view_exam(self, session_id: str, system: str) -> dict:
@@ -192,6 +248,7 @@ class SimulationEngine:
 
         ts = datetime.now().isoformat()
         session.action_log.append({"type": "exam", "detail": system_key or system, "ts": ts})
+        self._persist_session(session)
         return {"system": system_key or system, "findings": findings}
 
     def order_investigation(self, session_id: str, investigation: str) -> dict:
@@ -212,6 +269,7 @@ class SimulationEngine:
 
         ts = datetime.now().isoformat()
         session.action_log.append({"type": "investigation", "detail": key, "ts": ts})
+        self._persist_session(session)
         return {"investigation": key, "result": result}
 
     def view_imaging(self, session_id: str, study_id: str) -> dict:
@@ -232,6 +290,7 @@ class SimulationEngine:
 
         ts = datetime.now().isoformat()
         session.action_log.append({"type": "imaging", "detail": study_id, "ts": ts})
+        self._persist_session(session)
         return {
             "study_id": study["study_id"],
             "modality": study["modality"],
@@ -301,6 +360,9 @@ class SimulationEngine:
         session.status = "scored"
         session.completed_at = datetime.now().isoformat()
 
+        # Persist final session state
+        self._persist_session(session)
+
         # Release LangChain message history — session is complete
         clear_session_history(session_id)
 
@@ -342,12 +404,17 @@ class SimulationEngine:
                 session.completed_at = datetime.now().isoformat()
                 session.ai_pending = False
 
+                # Persist final session state
+                self._persist_session(session)
+
                 # Release LangChain message history
                 clear_session_history(session_id)
             except Exception as e:
                 logger.warning("Async AI scoring failed: %s", e)
                 session.ai_pending = False
                 session.score["ai_feedback"] = "AI feedback unavailable"
+                # Persist error state
+                self._persist_session(session)
 
         # Schedule background task
         asyncio.create_task(run_ai_scoring())
@@ -363,7 +430,8 @@ class SimulationEngine:
     # ── Helpers ────────────────────────────────────────────────────────────────
 
     def _get_active_session(self, session_id: str) -> SimulationSession:
-        session = self._sessions.get(session_id)
+        """Get session from cache or DB, checking it's active."""
+        session = self.get_session(session_id)  # Use DB-backed method
         if session is None:
             raise ValueError(f"Session {session_id} not found")
         if session.status == "scored":
