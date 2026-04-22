@@ -46,6 +46,7 @@ Thumbs.db
 *.swp
 *.swo
 .claude/settings.json
+.mcp.json
 
 # Node.js
 node_modules/

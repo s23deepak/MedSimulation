@@ -79,7 +79,7 @@
                         <option value="endless_medical">EndlessMedical Diagnostic</option>
                     </select>
 
-                    <button type="submit" class="btn-primary search-btn" id="searchBtn">Generate Case</button>
+                    <button type="submit" class="btn-primary search-btn" id="searchBtn" disabled title="Waiting for AI model to be ready...">Generate Case</button>
                 </form>
 
                 <div id="generatingOverlay" class="generating-overlay" role="alert">
@@ -535,16 +535,20 @@ IV heparin bolus
                 return false;
             } catch (e) {
                 console.error('vLLM health check failed:', e);
-                // Fail open - allow usage even if health check fails
-                vllmReady = true;
-                hideVllmLoading();
-                return true;
+                // Fail closed - keep loading screen visible, keep polling
+                // Don't allow usage until vLLM is actually ready
+                return false;
             }
         }
 
         function showVllmLoading() {
             document.getElementById('vllmLoading').classList.remove('hidden');
             document.getElementById('simWrapper').style.display = 'none';
+            // Update hint for Modal cold start scenario
+            const hint = document.getElementById('vllmLoadingHint');
+            if (hint) {
+                hint.textContent = 'This may take 30-60 seconds on first load or after idle timeout...';
+            }
         }
 
         function hideVllmLoading() {
@@ -554,22 +558,50 @@ IV heparin bolus
                 clearInterval(vllmCheckInterval);
                 vllmCheckInterval = null;
             }
+            // Re-enable case cards now that vLLM is ready
+            const cards = document.querySelectorAll('.case-card');
+            cards.forEach(card => {
+                card.style.opacity = '1';
+                card.style.pointerEvents = 'auto';
+                card.title = '';
+            });
+            // Re-enable search button
+            const searchBtn = document.getElementById('searchBtn');
+            searchBtn.disabled = false;
         }
 
         function waitForVllmAndLoad() {
             // Show loading screen immediately
             showVllmLoading();
 
+            // Update loading message based on vLLM state
+            const updateLoadingMessage = () => {
+                fetch('/api/health').then(res => res.json()).then(data => {
+                    const title = document.querySelector('.vllm-loading-title');
+                    const text = document.querySelector('.vllm-loading-text');
+                    if (data.vllm_warming_up) {
+                        if (title) title.textContent = 'Waking Up AI Patient...';
+                        if (text) text.textContent = 'Preparing patient for consultation. Please wait.';
+                    } else if (data.vllm_ready) {
+                        if (title) title.textContent = 'AI Model Ready!';
+                        if (text) text.textContent = 'Loading cases...';
+                    }
+                }).catch(() => {});
+            };
+
             // Check immediately
             checkVllmReadiness().then(ready => {
                 if (ready) {
                     loadCases();
                 } else {
-                    // Poll every 2 seconds until ready
+                    // Update message and poll every 2 seconds until ready
+                    updateLoadingMessage();
                     vllmCheckInterval = setInterval(async () => {
                         const isReady = await checkVllmReadiness();
                         if (isReady) {
                             loadCases();
+                        } else {
+                            updateLoadingMessage();
                         }
                     }, 2000);
                 }
@@ -620,6 +652,11 @@ IV heparin bolus
                     <ul>${c.learning_objectives.slice(0, 3).map(o => `<li>${escapeHtml(o)}</li>`).join('')}</ul>
                 `;
                     const startCase = () => {
+                        // Block if vLLM not ready
+                        if (!vllmReady) {
+                            showToast('AI model is still warming up. Please wait...', 'warning');
+                            return;
+                        }
                         const arm = c._arm_id || `${c.specialty}_${c.difficulty}`.toLowerCase().replace(/ /g, '_');
                         fetch('/api/cases/track_engagement', {
                             method: 'POST',
@@ -628,6 +665,12 @@ IV heparin bolus
                         }).catch(e => console.error("Telemetry error", e));
                         startSimulation(c.case_id, name);
                     };
+                    // Disable clicks while vLLM is warming up
+                    if (!vllmReady) {
+                        card.style.opacity = '0.5';
+                        card.style.pointerEvents = 'none';
+                        card.title = 'Waiting for AI model to be ready...';
+                    }
                     card.onclick = startCase;
                     card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startCase(); } };
                     grid.appendChild(card);
@@ -643,6 +686,12 @@ IV heparin bolus
             const topic = document.getElementById('topicInput').value.trim();
             const source = document.getElementById('sourceSelect').value;
             if (!topic) return;
+
+            // Block if vLLM not ready
+            if (!vllmReady) {
+                showToast('AI model is still warming up. Please wait a moment...', 'warning');
+                return;
+            }
 
             const btn = document.getElementById('searchBtn');
             const overlay = document.getElementById('generatingOverlay');
@@ -695,6 +744,12 @@ IV heparin bolus
 
         // ── Start simulation ──
         async function startSimulation(caseId, residentName) {
+            // Block until vLLM is ready
+            if (!vllmReady) {
+                showToast('AI model is still warming up. Please wait a moment...', 'warning');
+                return;
+            }
+
             try {
                 const res = await fetch('/api/simulation/start', {
                     method: 'POST',
@@ -811,6 +866,7 @@ IV heparin bolus
         }
 
         function setupExamSystems() {
+            const s = currentSession;
             const sg = document.getElementById('systemGrid');
             sg.innerHTML = '';
 
@@ -831,7 +887,7 @@ IV heparin bolus
                 btn.id = `exam-${sys.replace(/\s+/g, '-').toLowerCase()}`;
                 btn.onclick = () => examSystem(sys, btn);
                 // Mark already-viewed systems
-                if (s.exam_systems_viewed && s.exam_systems_viewed.includes(sys)) {
+                if (s && s.exam_systems_viewed && s.exam_systems_viewed.includes(sys)) {
                     btn.classList.add('done');
                 }
                 sg.appendChild(btn);
@@ -1249,8 +1305,16 @@ IV heparin bolus
             const input = document.getElementById('historyInput');
             const question = input.value.trim();
             if (!question || !currentSession) return;
-            input.value = '';
 
+            // Check vLLM readiness before asking
+            if (!vllmReady) {
+                showToast('AI model is waking up. Please wait a moment...', 'warning');
+                // Trigger warmup
+                fetch('/api/vllm/warmup', { method: 'POST' }).catch(() => {});
+                return;
+            }
+
+            input.value = '';
             const cm = document.getElementById('chatMessages');
 
             cm.innerHTML += `<div class="msg msg-resident"><div class="msg-label">You (Doctor)</div><div class="msg-bubble">${escapeHtml(question)}</div></div>`;
@@ -1260,7 +1324,7 @@ IV heparin bolus
 
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000);
+                const timeoutId = setTimeout(() => controller.abort(), 45000);  // Increased to 45s for cold start
                 const spinnerEl = document.getElementById('chatSpinner');
                 let elapsed = 0;
                 const tickId = setInterval(() => { elapsed++; spinnerEl.textContent = `Thinking... (${elapsed}s)`; }, 1000);
@@ -1293,7 +1357,9 @@ IV heparin bolus
             } catch (err) {
                 document.getElementById('chatSpinner').classList.remove('show');
                 document.getElementById('chatSpinner').textContent = 'Thinking...';
-                const errMsg = err.name === 'AbortError' ? 'Request timed out (30s). The AI server may be overloaded.' : err.message;
+                const errMsg = err.name === 'AbortError'
+                    ? 'Request timed out (45s). The AI model may still be waking up from sleep. Please try again - the second attempt should be faster.'
+                    : err.message;
                 cm.innerHTML += `<div class="msg msg-patient"><div class="msg-label text-danger">System</div><div class="msg-bubble msg-error">Unable to get response: ${escapeHtml(errMsg)}. Please try again.</div></div>`;
                 cm.scrollTop = cm.scrollHeight;
             }
