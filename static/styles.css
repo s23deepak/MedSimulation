@@ -1115,13 +1115,11 @@ select:focus:not(:focus-visible) {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border);
-    gap: 1rem;
-    background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
     padding: 1rem 1.25rem;
+    background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
+    gap: 1.5rem;
 }
 
 .sim-topbar-left {
@@ -1131,6 +1129,7 @@ select:focus:not(:focus-visible) {
     gap: 0.375rem;
     flex: 1;
     min-width: 0;
+    max-width: 60%;
 }
 
 .sim-topbar h2 {
@@ -1141,6 +1140,14 @@ select:focus:not(:focus-visible) {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.sim-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
 }
 
 /* Back link styling - positioned above title */
@@ -1205,13 +1212,6 @@ select:focus:not(:focus-visible) {
 .cite-link:hover {
     color: var(--primary-dark);
     text-decoration: underline;
-}
-
-.sim-topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-shrink: 0;
 }
 
 .timer {
