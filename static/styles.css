@@ -749,6 +749,95 @@ select:focus:not(:focus-visible) {
     background: var(--border);
 }
 
+/* Case filter input */
+.recommended-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.recommended-header .section-title {
+    margin-bottom: 0;
+}
+
+.case-filter-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.case-filter-input {
+    padding: 0.5rem 2rem 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    width: 220px;
+    transition: all 0.2s ease;
+}
+
+.case-filter-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.case-filter-input::placeholder {
+    color: var(--text-secondary);
+}
+
+.btn-clear-filter {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    display: none;
+    color: var(--text-secondary);
+    transition: color 0.2s ease;
+}
+
+.btn-clear-filter:hover {
+    color: var(--text-primary);
+}
+
+.btn-clear-filter.visible {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-clear-filter svg {
+    width: 14px;
+    height: 14px;
+}
+
+.no-cases-message {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--primary);
+    font-size: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.btn-link:hover {
+    color: var(--primary-dark);
+}
+
 /* ── Case grid + cards ─────────────────────────────────────────────────────── */
 .case-grid {
     display: grid;

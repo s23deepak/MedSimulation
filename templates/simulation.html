@@ -76,7 +76,6 @@
                         <option value="auto">Auto (Best Available)</option>
                         <option value="pubmed">PubMed Case Reports</option>
                         <option value="wiley">Wiley Open Access</option>
-                        <option value="endless_medical">EndlessMedical Diagnostic</option>
                     </select>
 
                     <button type="submit" class="btn-primary search-btn" id="searchBtn" disabled title="Waiting for AI model to be ready...">Generate Case</button>
@@ -93,7 +92,20 @@
             </div>
 
             <div class="recommended-section">
-                <h3 class="section-title">Recommended Cases</h3>
+                <div class="recommended-header">
+                    <h3 class="section-title">Recommended Cases</h3>
+                    <div class="case-filter-wrapper">
+                        <input type="text" id="caseFilterInput" class="case-filter-input"
+                               placeholder="Filter cases by keyword..."
+                               aria-label="Filter cases"
+                               oninput="filterCases()" />
+                        <button class="btn-clear-filter" onclick="clearCaseFilter()" title="Clear filter" aria-label="Clear filter">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 6L6 18M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
                 <div id="caseGrid" class="case-grid" role="list">
                     <!-- Skeleton placeholders -->
                     <div class="skeleton skeleton-card" aria-hidden="true"></div>
@@ -103,6 +115,9 @@
                     <div class="skeleton skeleton-card" aria-hidden="true"></div>
                     <div class="skeleton skeleton-card" aria-hidden="true"></div>
                 </div>
+                <p id="noCasesMessage" class="no-cases-message" style="display:none;">
+                    No matching cases found. Try a different keyword or <button class="btn-link" onclick="clearCaseFilter()">clear filter</button>.
+                </p>
             </div>
 
             <!-- About Section -->
@@ -629,9 +644,10 @@ IV heparin bolus
             const grid = document.getElementById('caseGrid');
 
             try {
-                const res = await fetch('/api/cases/recommended?limit=6');
+                const res = await fetch('/api/cases/recommended?limit=12');
                 if (!res.ok) throw new Error('Failed to load cases');
                 const cases = await res.json();
+                allCases = cases; // Store for filtering
                 grid.innerHTML = '';
                 if (cases.length === 0) {
                     grid.innerHTML = '<p class="empty-text text-center">No cases available. Generate one above.</p>';
@@ -680,6 +696,93 @@ IV heparin bolus
             }
         }
 
+        // Store all cases for filtering
+        let allCases = [];
+
+        // Filter cases based on search text
+        function filterCases() {
+            const input = document.getElementById('caseFilterInput');
+            const filterText = input.value.toLowerCase().trim();
+            const grid = document.getElementById('caseGrid');
+            const noCasesMsg = document.getElementById('noCasesMessage');
+            const clearBtn = document.querySelector('.btn-clear-filter');
+
+            // Show/hide clear button
+            if (clearBtn) {
+                clearBtn.classList.toggle('visible', filterText.length > 0);
+            }
+
+            // Filter cases
+            const filtered = allCases.filter(c => {
+                const searchText = `${c.title} ${c.specialty} ${c.difficulty}`.toLowerCase();
+                return searchText.includes(filterText);
+            });
+
+            // Clear grid
+            grid.innerHTML = '';
+
+            // Show message if no matches
+            if (filtered.length === 0 && allCases.length > 0) {
+                noCasesMsg.style.display = 'block';
+                return;
+            }
+            noCasesMsg.style.display = 'none';
+
+            // Render filtered cases
+            if (filtered.length === 0) {
+                grid.innerHTML = '<p class="empty-text">No cases available.</p>';
+                return;
+            }
+
+            const name = document.getElementById('residentName').value.trim() || 'Resident';
+            filtered.forEach((c, i) => {
+                const card = document.createElement('div');
+                card.className = 'case-card';
+                card.setAttribute('role', 'listitem');
+                card.setAttribute('tabindex', '0');
+                card.style.animationDelay = `${i * 0.08}s`;
+                card.innerHTML = `
+                    <div class="case-badge">
+                        <span class="badge badge-specialty">${escapeHtml(c.specialty)}</span>
+                        <span class="badge badge-${c.difficulty}">${escapeHtml(c.difficulty)}</span>
+                    </div>
+                    <h3>${escapeHtml(c.title)}</h3>
+                    <ul>${c.learning_objectives.slice(0, 3).map(o => `<li>${escapeHtml(o)}</li>`).join('')}</ul>
+                `;
+                const startCase = () => {
+                    if (!vllmReady) {
+                        showToast('AI model is still warming up. Please wait...', 'warning');
+                        return;
+                    }
+                    const arm = c._arm_id || `${c.specialty}_${c.difficulty}`.toLowerCase().replace(/ /g, '_');
+                    fetch('/api/cases/track_engagement', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ arm_id: arm, success: true })
+                    }).catch(e => console.error("Telemetry error", e));
+                    startSimulation(c.case_id, name);
+                };
+                if (!vllmReady) {
+                    card.style.opacity = '0.5';
+                    card.style.pointerEvents = 'none';
+                    card.title = 'Waiting for AI model to be ready...';
+                }
+                card.onclick = startCase;
+                card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startCase(); } };
+                grid.appendChild(card);
+            });
+        }
+
+        // Clear filter
+        function clearCaseFilter() {
+            const input = document.getElementById('caseFilterInput');
+            input.value = '';
+            const clearBtn = document.querySelector('.btn-clear-filter');
+            if (clearBtn) clearBtn.classList.remove('visible');
+            filterCases();
+            input.focus();
+        }
+
         // ── Search & Generate ──
         async function handleSearch(e) {
             e.preventDefault();
@@ -693,6 +796,25 @@ IV heparin bolus
                 return;
             }
 
+            // First, search existing cases for matches
+            const searchLower = topic.toLowerCase();
+            const existingMatch = allCases.find(c =>
+                c.title.toLowerCase().includes(searchLower) ||
+                c.specialty.toLowerCase().includes(searchLower) ||
+                c.learning_objectives.some(o => o.toLowerCase().includes(searchLower))
+            );
+
+            // If existing case found, filter to show matching cases and scroll to grid
+            if (existingMatch) {
+                const filterInput = document.getElementById('caseFilterInput');
+                filterInput.value = topic;
+                filterCases();
+                document.querySelector('.recommended-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                showToast(`Found ${allCases.filter(c => c.title.toLowerCase().includes(searchLower) || c.specialty.toLowerCase().includes(searchLower) || c.learning_objectives.some(o => o.toLowerCase().includes(searchLower))).length} matching case(s). Click a case to start, or generate a new one.`, 'info');
+                return;
+            }
+
+            // No existing match, proceed with generation
             const btn = document.getElementById('searchBtn');
             const overlay = document.getElementById('generatingOverlay');
             const errorEl = document.getElementById('searchError');
