@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css?v=8">
+    <link rel="stylesheet" href="/static/styles.css?v=9">
 </head>
 
 <body>
@@ -69,11 +69,26 @@
                         placeholder="Search by condition, symptom, or specialty..." aria-label="Search topic"
                         required />
 
-                    <select id="sourceSelect" class="source-select" aria-label="Case source">
-                        <option value="auto">Auto (Best Available)</option>
-                        <option value="pubmed">PubMed Case Reports</option>
-                        <option value="wiley">Wiley Open Access</option>
-                    </select>
+                    <div class="custom-dropdown" id="sourceDropdown">
+                        <div class="dropdown-trigger" id="dropdownTrigger" role="button" aria-haspopup="listbox" tabindex="0">
+                            <span class="dropdown-value" id="dropdownValue">Auto (Best Available)</span>
+                            <svg class="dropdown-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </div>
+                        <ul class="dropdown-menu" id="dropdownMenu" role="listbox">
+                            <li class="dropdown-option" role="option" data-value="auto" aria-selected="true">
+                                <span class="option-text">Auto (Best Available)</span>
+                            </li>
+                            <li class="dropdown-option" role="option" data-value="pubmed" aria-selected="false">
+                                <span class="option-text">PubMed Case Reports</span>
+                            </li>
+                            <li class="dropdown-option" role="option" data-value="wiley" aria-selected="false">
+                                <span class="option-text">Wiley Open Access</span>
+                            </li>
+                        </ul>
+                        <input type="hidden" id="sourceSelect" value="auto" />
+                    </div>
 
                     <button type="submit" class="btn-primary search-btn" id="searchBtn" disabled>Generate Case</button>
                 </form>
@@ -1822,11 +1837,111 @@ IV heparin bolus
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
+        // Custom Dropdown
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        function initCustomDropdown() {
+            const dropdown = document.getElementById('sourceDropdown');
+            const trigger = document.getElementById('dropdownTrigger');
+            const menu = document.getElementById('dropdownMenu');
+            const valueDisplay = document.getElementById('dropdownValue');
+            const hiddenInput = document.getElementById('sourceSelect');
+            const options = menu.querySelectorAll('.dropdown-option');
+
+            if (!dropdown || !trigger || !menu) return;
+
+            // Toggle dropdown
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isShown = menu.classList.contains('show');
+                closeAllDropdowns();
+                if (!isShown) {
+                    menu.classList.add('show');
+                    trigger.classList.add('active');
+                }
+            });
+
+            // Handle option selection
+            options.forEach(option => {
+                option.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const selectedValue = option.dataset.value;
+                    const selectedText = option.querySelector('.option-text').textContent;
+
+                    // Update hidden input
+                    hiddenInput.value = selectedValue;
+
+                    // Update display
+                    valueDisplay.textContent = selectedText;
+
+                    // Update aria-selected
+                    options.forEach(opt => opt.setAttribute('aria-selected', 'false'));
+                    option.setAttribute('aria-selected', 'true');
+
+                    // Close dropdown
+                    menu.classList.remove('show');
+                    trigger.classList.remove('active');
+
+                    // Enable search button if topic is entered
+                    const topicInput = document.getElementById('topicInput');
+                    if (topicInput && topicInput.value.trim()) {
+                        document.getElementById('searchBtn').disabled = false;
+                    }
+                });
+            });
+
+            // Close on outside click
+            document.addEventListener('click', (e) => {
+                if (!dropdown.contains(e.target)) {
+                    menu.classList.remove('show');
+                    trigger.classList.remove('active');
+                }
+            });
+
+            // Keyboard navigation
+            trigger.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    trigger.click();
+                }
+                if (e.key === 'Escape') {
+                    menu.classList.remove('show');
+                    trigger.classList.remove('active');
+                }
+            });
+
+            options.forEach((option, index) => {
+                option.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const next = options[(index + 1) % options.length];
+                        next.focus();
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const prev = options[(index - 1 + options.length) % options.length];
+                        prev.focus();
+                    }
+                });
+            });
+        }
+
+        function closeAllDropdowns() {
+            document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                menu.classList.remove('show');
+            });
+            document.querySelectorAll('.dropdown-trigger').forEach(trigger => {
+                trigger.classList.remove('active');
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
         // Page Load Initialization
         // ═══════════════════════════════════════════════════════════════════════════
 
         // Initialize on page load
         window.addEventListener('load', () => {
+            initCustomDropdown();
             cacheRecommendedCases();
         });
 
