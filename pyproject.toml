@@ -17,6 +17,7 @@ dependencies = [
     "pydicom>=2.4.0",
     "beautifulsoup4>=4.12.3",
     "fpdf2>=2.7.9",
+    "modal>=1.4.2",
 ]
 
 [project.optional-dependencies]

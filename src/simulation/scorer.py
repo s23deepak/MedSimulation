@@ -159,7 +159,7 @@ def _ai_score(session: Any, agent: Any) -> ScoreResult:
         # Validate AI output - reject code snippets or garbage
         if feedback_text:
             # Check for code-like output (Python keywords, def statements, etc.)
-            code_indicators = ["def ", "import ", "print(", "```python", "```", "    # ", ":\"\"\"", ":'''"]
+            code_indicators = ["def ", "import ", "print(", "```python"]
             is_code = any(indicator in feedback_text for indicator in code_indicators)
 
             # Check for minimum meaningful content (at least 50 chars and contains sentences)
