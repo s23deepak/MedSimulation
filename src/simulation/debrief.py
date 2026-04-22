@@ -108,10 +108,6 @@ def generate_debrief(
     # Always start from rule-based debrief
     debrief = _rule_based_debrief(session, score_result)
 
-    # Debug logging
-    logger.info("generate_debrief: case.key_learning_points has %d items", len(session.case.key_learning_points) if session.case.key_learning_points else 0)
-    logger.info("generate_debrief: debrief.coaching_points has %d items: %s", len(debrief.coaching_points), debrief.coaching_points[:2] if debrief.coaching_points else [])
-
     # Enhance with AI if available
     if agent is not None:
         try:
@@ -129,10 +125,6 @@ def generate_debrief(
 def _rule_based_debrief(session: Any, score: ScoreResult) -> DebriefResult:
     """Generate deterministic feedback from scores and case data."""
     case = session.case
-
-    # Debug logging
-    logger.info("_rule_based_debrief: case.key_learning_points = %s", case.key_learning_points)
-    logger.info("_rule_based_debrief: score.key_learning_points = %s", getattr(score, 'key_learning_points', 'N/A'))
 
     # Summary
     if score.percentage >= 85:
