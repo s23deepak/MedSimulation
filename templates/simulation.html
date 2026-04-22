@@ -645,15 +645,26 @@ IV heparin bolus
             }
         }
 
-        async function loadCases() {
-            const name = document.getElementById('residentName').value.trim() || 'Resident';
-            const grid = document.getElementById('caseGrid');
+        // Cache recommended cases for filtering
+async function cacheRecommendedCases() {
+    try {
+        const res = await fetch('/api/cases/recommended?limit=12');
+        if (!res.ok) return;
+        allCases = await res.json();
+    } catch (e) {
+        console.error('Failed to cache cases:', e);
+    }
+}
 
-            try {
-                const res = await fetch('/api/cases/recommended?limit=12');
-                if (!res.ok) throw new Error('Failed to load cases');
-                const cases = await res.json();
-                allCases = cases; // Store for filtering
+async function loadCases() {
+    const name = document.getElementById('residentName').value.trim() || 'Resident';
+    const grid = document.getElementById('caseGrid');
+
+    try {
+        const res = await fetch('/api/cases/recommended?limit=12');
+        if (!res.ok) throw new Error('Failed to load cases');
+        const cases = await res.json();
+        allCases = cases; // Store for filtering
                 grid.innerHTML = '';
                 if (cases.length === 0) {
                     grid.innerHTML = '<p class="empty-text text-center">No cases available. Generate one above.</p>';
