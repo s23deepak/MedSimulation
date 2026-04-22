@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <meta name="description"
-        content="Clinical simulation lab — practice clinical reasoning with AI patients and expert feedback across emergency, surgical, and medical cases.">
+        content="Clinical simulation lab — practice clinical reasoning with simulated patients and expert feedback across emergency, surgical, and medical cases.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Clinical Simulation Lab | MedSimulation</title>
@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css?v=7">
+    <link rel="stylesheet" href="/static/styles.css?v=8">
 </head>
 
 <body>
@@ -37,7 +37,7 @@
     <!-- Toast notifications -->
     <div class="toast-container" id="toastContainer" role="status" aria-live="polite"></div>
 
-    <!-- vLLM Loading Screen -->
+    <!-- Loading Screen -->
     <div id="vllmLoading" class="vllm-loading" role="alert" aria-live="polite">
         <div class="vllm-loading-content">
             <div class="vllm-loading-icon">
@@ -61,15 +61,12 @@
         <!-- ══════════════════ SCREEN 1: DASHBOARD ══════════════════ -->
         <div id="screen-landing" class="screen active" role="main">
             <div class="search-hero">
-                <h1>Clinical Simulation Assistant</h1>
-                <p>Search a topic to instantly generate a custom clinical case, or choose from our recommendations
-                    below.</p>
-
-                <!-- Connection status badge removed per user request -->
+                <h1>Clinical Simulation Lab</h1>
+                <p>Search a clinical topic to generate a case, or select from recommended cases below.</p>
 
                 <form id="searchForm" class="search-form" onsubmit="handleSearch(event)" role="search">
                     <input type="text" id="topicInput" class="search-input"
-                        placeholder="What would you like to practice diagnosing today?" aria-label="Search topic"
+                        placeholder="Search by condition, symptom, or specialty..." aria-label="Search topic"
                         required />
 
                     <select id="sourceSelect" class="source-select" aria-label="Case source">
@@ -78,7 +75,7 @@
                         <option value="wiley">Wiley Open Access</option>
                     </select>
 
-                    <button type="submit" class="btn-primary search-btn" id="searchBtn" disabled title="Waiting for AI model to be ready...">Generate Case</button>
+                    <button type="submit" class="btn-primary search-btn" id="searchBtn" disabled>Generate Case</button>
                 </form>
 
                 <div id="generatingOverlay" class="generating-overlay" role="alert">
@@ -124,43 +121,37 @@
             <section id="about" class="about-section">
                 <div class="about-container">
                     <h2 class="about-title">About MedSimulation</h2>
-                    <p class="about-lead">A high-fidelity AI-powered clinical simulation lab designed for medical
-                        training and competency assessment.</p>
+                    <p class="about-lead">A clinical simulation platform for medical training and competency assessment.</p>
 
                     <div class="about-features">
                         <div class="about-card">
                             <div class="about-icon">💬</div>
                             <h3>Dynamic History</h3>
-                            <p>Interact with AI-driven patient personas that withheld or reveal clinical clues based on
-                                your interview technique.</p>
+                            <p>Interact with simulated patients that reveal clinical clues based on your interview technique.</p>
                         </div>
                         <div class="about-card">
                             <div class="about-icon">🩺</div>
                             <h3>Physical Exam</h3>
-                            <p>Selectively examine organ systems to receive realistic findings across medical, surgical,
-                                and emergency cases.</p>
+                            <p>Examine organ systems to receive findings across medical, surgical, and emergency cases.</p>
                         </div>
                         <div class="about-card">
                             <div class="about-icon">🔬</div>
                             <h3>Multi-modal Diagnostics</h3>
-                            <p>Order and interpret lab results, algorithmically generated 12-lead ECGs, and HD clinical
-                                imaging.</p>
+                            <p>Order and interpret lab results, 12-lead ECGs, and clinical imaging including DICOM studies.</p>
                         </div>
                         <div class="about-card">
                             <div class="about-icon">📊</div>
                             <h3>Structured Feedback</h3>
-                            <p>Receive immediate scoring across 5 domains with a narrative debrief from our "Senior
-                                Clinician" AI agent.</p>
+                            <p>Receive scoring across 5 domains with narrative debrief from a senior clinician perspective.</p>
                         </div>
                     </div>
 
                     <div class="about-tech">
-                        <h3>Built with Modern AI Infrastructure</h3>
+                        <h3>Technology Stack</h3>
                         <div class="tech-tags">
                             <span class="tech-tag">MedGemma 4B</span>
                             <span class="tech-tag">vLLM Inference</span>
                             <span class="tech-tag">Modal Cloud</span>
-                            <span class="tech-tag">FastAPI</span>
                             <span class="tech-tag">Cornerstone3D</span>
                         </div>
                     </div>
@@ -398,7 +389,7 @@ IV heparin bolus
                 </div>
                 <div>
                     <div class="feedback-block" id="aiFeedbackBlock" style="display:none;">
-                        <h4>AI Tutor Feedback</h4>
+                        <h4>Clinical Feedback</h4>
                         <div id="aiFeedbackText" class="ai-feedback-text"></div>
                     </div>
                     <div class="feedback-block" id="aiNarrativeBlock" style="display:none;">
@@ -598,7 +589,7 @@ IV heparin bolus
                         if (title) title.textContent = 'Waking Up AI Patient...';
                         if (text) text.textContent = 'Preparing patient for consultation. Please wait.';
                     } else if (data.vllm_ready) {
-                        if (title) title.textContent = 'AI Model Ready!';
+                        if (title) title.textContent = 'AI Patient Ready!';
                         if (text) text.textContent = 'Loading cases...';
                     }
                 }).catch(() => {});
@@ -670,7 +661,7 @@ IV heparin bolus
                     const startCase = () => {
                         // Block if vLLM not ready
                         if (!vllmReady) {
-                            showToast('AI model is still warming up. Please wait...', 'warning');
+                            showToast('Patient is sleeping. Waking them up...', 'warning');
                             return;
                         }
                         const arm = c._arm_id || `${c.specialty}_${c.difficulty}`.toLowerCase().replace(/ /g, '_');
@@ -685,7 +676,7 @@ IV heparin bolus
                     if (!vllmReady) {
                         card.style.opacity = '0.5';
                         card.style.pointerEvents = 'none';
-                        card.title = 'Waiting for AI model to be ready...';
+                        card.title = 'System initializing...';
                     }
                     card.onclick = startCase;
                     card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startCase(); } };
@@ -751,7 +742,7 @@ IV heparin bolus
                 `;
                 const startCase = () => {
                     if (!vllmReady) {
-                        showToast('AI model is still warming up. Please wait...', 'warning');
+                        showToast('Patient is sleeping. Waking them up...', 'warning');
                         return;
                     }
                     const arm = c._arm_id || `${c.specialty}_${c.difficulty}`.toLowerCase().replace(/ /g, '_');
@@ -792,7 +783,7 @@ IV heparin bolus
 
             // Block if vLLM not ready
             if (!vllmReady) {
-                showToast('AI model is still warming up. Please wait a moment...', 'warning');
+                showToast('Patient is still waking up. Please wait...', 'warning');
                 return;
             }
 
@@ -833,7 +824,7 @@ IV heparin bolus
 
                 if (!res.ok) {
                     if (res.status === 503) {
-                        throw new Error('AI inference server (vLLM) is not connected. Case generation requires a running vLLM server. Try selecting a case from the recommendations below.');
+                        throw new Error('Inference server (vLLM) is not connected. Case generation requires a running vLLM server. Try selecting a case from the recommendations below.');
                     }
                     let errStr = "Failed to generate case";
                     try { const errData = await res.json(); errStr = errData.detail || errStr; } catch (e) { }
@@ -868,7 +859,7 @@ IV heparin bolus
         async function startSimulation(caseId, residentName) {
             // Block until vLLM is ready
             if (!vllmReady) {
-                showToast('AI model is still warming up. Please wait a moment...', 'warning');
+                showToast('Patient is still waking up. Please wait...', 'warning');
                 return;
             }
 
@@ -897,7 +888,7 @@ IV heparin bolus
             document.getElementById('simMeta').textContent = `${s.specialty} \u00B7 ${s.difficulty} \u00B7 ${s.resident_name}`;
             document.getElementById('presentationText').textContent = s.presentation;
 
-            // Citation badge for AI-generated cases
+            // Citation badge for generated cases
             const citation = document.getElementById('simCitation');
             const srcLabel = { pubmed: 'PubMed', wiley: 'Wiley Open Access', endless_medical: 'Endless Medical', ai_generated: 'AI Generated' }[s.source] || s.source;
             if (s.source && s.source !== 'static' && s.source !== 'agentclinic') {
@@ -1125,7 +1116,7 @@ IV heparin bolus
                     <div class="no-image-placeholder">
                         <div class="no-image-icon">🩻</div>
                         <div class="no-image-modality">${escapeHtml(data.modality)}</div>
-                        <p class="no-image-msg">No image file is available for this AI-generated case.<br>Use <strong>Interpret Findings</strong> below to view the radiological description.</p>
+                        <p class="no-image-msg">No image file is available for this case.<br>Use <strong>Interpret Findings</strong> below to view the radiological description.</p>
                     </div>`;
                 document.getElementById('lbContrast').closest('.lightbox-controls').style.display = 'none';
                 document.getElementById('lightboxOverlay').classList.add('active');
@@ -1430,7 +1421,7 @@ IV heparin bolus
 
             // Check vLLM readiness before asking
             if (!vllmReady) {
-                showToast('AI model is waking up. Please wait a moment...', 'warning');
+                showToast('Patient is waking up. Please wait...', 'warning');
                 // Trigger warmup
                 fetch('/api/vllm/warmup', { method: 'POST' }).catch(() => {});
                 return;
@@ -1480,7 +1471,7 @@ IV heparin bolus
                 document.getElementById('chatSpinner').classList.remove('show');
                 document.getElementById('chatSpinner').textContent = 'Thinking...';
                 const errMsg = err.name === 'AbortError'
-                    ? 'Request timed out (45s). The AI model may still be waking up from sleep. Please try again - the second attempt should be faster.'
+                    ? 'Request timed out (45s). Patient is unresponsive - they may be napping. Try again, they should be more alert the second time.'
                     : err.message;
                 cm.innerHTML += `<div class="msg msg-patient"><div class="msg-label text-danger">System</div><div class="msg-bubble msg-error">Unable to get response: ${escapeHtml(errMsg)}. Please try again.</div></div>`;
                 cm.scrollTop = cm.scrollHeight;
@@ -1590,7 +1581,7 @@ IV heparin bolus
                 // Show scores immediately
                 showResultsProgressive(data);
 
-                // Start polling for AI feedback
+                // Start polling for feedback
                 if (!data.ai_ready) {
                     pollForAiFeedback(currentSession.session_id);
                 }
@@ -1605,7 +1596,7 @@ IV heparin bolus
         let aiPollInterval = null;
 
         async function pollForAiFeedback(sessionId) {
-            // Show loading state for AI feedback
+            // Show loading state for Clinical feedback
             const aiBlock = document.getElementById('aiFeedbackBlock');
             const aiNarrativeBlock = document.getElementById('aiNarrativeBlock');
 
@@ -1614,12 +1605,12 @@ IV heparin bolus
                 document.getElementById('aiFeedbackText').innerHTML = `
                     <div class="ai-loading">
                         <span class="spinner-dot"></span>
-                        <span>Generating AI feedback...</span>
+                        <span>Generating Clinical feedback...</span>
                     </div>
                 `;
             }
 
-            // Poll every 800ms until AI feedback is ready
+            // Poll every 800ms until Clinical feedback is ready
             aiPollInterval = setInterval(async () => {
                 try {
                     const res = await fetch(`/api/simulation/session/${sessionId}/status`);
@@ -1632,12 +1623,12 @@ IV heparin bolus
                     if (data.ai_ready) {
                         clearInterval(aiPollInterval);
 
-                        // Update AI feedback
+                        // Update Clinical feedback
                         if (data.ai_feedback && aiBlock) {
                             document.getElementById('aiFeedbackText').innerHTML = formatAiFeedback(data.ai_feedback);
                         }
 
-                        // Update AI narrative
+                        // Update Clinical narrative
                         if (data.debrief && data.debrief.ai_narrative && aiNarrativeBlock) {
                             aiNarrativeBlock.style.display = 'block';
                             document.getElementById('aiNarrativeText').innerHTML = formatAiFeedback(data.debrief.ai_narrative);
@@ -1708,7 +1699,7 @@ IV heparin bolus
             document.getElementById('correctDiagnosis').textContent = scores.correct_diagnosis;
             document.getElementById('correctManagement').innerHTML = scores.correct_management.map(m => `<div class="mgmt-item">✓ ${escapeHtml(m)}</div>`).join('');
 
-            // AI feedback - will be filled by polling
+            // Clinical feedback - will be filled by polling
             const aiBlock = document.getElementById('aiFeedbackBlock');
             if (aiBlock) {
                 aiBlock.style.display = 'block';
@@ -1718,7 +1709,7 @@ IV heparin bolus
                 }
             }
 
-            // AI narrative - hidden until ready
+            // Clinical narrative - hidden until ready
             const aiNarrativeBlock = document.getElementById('aiNarrativeBlock');
             if (aiNarrativeBlock) {
                 aiNarrativeBlock.style.display = 'none';
@@ -1777,7 +1768,7 @@ IV heparin bolus
             document.getElementById('correctDiagnosis').textContent = scores.correct_diagnosis;
             document.getElementById('correctManagement').innerHTML = scores.correct_management.map(m => `<div class="mgmt-item">\u2713 ${escapeHtml(m)}</div>`).join('');
 
-            // AI feedback
+            // Clinical feedback
             if (scores.ai_feedback) {
                 document.getElementById('aiFeedbackBlock').style.display = 'block';
                 document.getElementById('aiFeedbackText').innerHTML = formatAiFeedback(scores.ai_feedback);
@@ -1785,7 +1776,7 @@ IV heparin bolus
                 document.getElementById('aiFeedbackBlock').style.display = 'none';
             }
 
-            // AI narrative
+            // Clinical narrative
             if (debrief.ai_narrative) {
                 document.getElementById('aiNarrativeBlock').style.display = 'block';
                 document.getElementById('aiNarrativeText').innerHTML = formatAiFeedback(debrief.ai_narrative);
