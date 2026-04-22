@@ -412,7 +412,7 @@ async def api_sim_submit(payload: dict):
     """
     Resident submits diagnosis and management for scoring.
     Body: { "session_id": str, "diagnosis": str, "management": list[str] }
-    Returns scores immediately, AI feedback streams in asynchronously.
+    Returns complete scores and debrief (synchronous AI scoring).
     """
     global vllm_ready
 
@@ -432,11 +432,11 @@ async def api_sim_submit(payload: dict):
         )
 
     try:
-        # Use async scoring - returns immediately with rule-based scores
+        # Use synchronous scoring - waits for AI feedback and debrief
         result = simulation_engine.submit_assessment(
-            session_id, diagnosis, management, wait_for_ai=False
+            session_id, diagnosis, management, wait_for_ai=True
         )
-        log_with_context("Assessment submitted (async)", session_id=session_id, diagnosis=diagnosis[:50])
+        log_with_context("Assessment submitted (sync)", session_id=session_id, diagnosis=diagnosis[:50])
         return JSONResponse(content=result)
     except ValueError as e:
         log_with_context("Assessment failed", session_id=session_id, error=str(e))

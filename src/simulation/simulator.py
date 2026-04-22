@@ -315,6 +315,9 @@ class SimulationEngine:
         wait_for_ai : bool
             If True (default), waits for AI scoring to complete before returning.
             If False, returns rule-based scores immediately and runs AI scoring in background.
+
+        Note: In Modal serverless mode, async scoring is unreliable because background
+        tasks may be terminated when the request completes. Synchronous scoring is recommended.
         """
         session = self._get_active_session(session_id)
 
@@ -340,12 +343,9 @@ class SimulationEngine:
         session.status = "submitted"
         session.action_log.append({"type": "assessment", "detail": diagnosis, "ts": datetime.now().isoformat()})
 
-        if wait_for_ai:
-            # Synchronous: wait for AI scoring (legacy behavior)
-            return self._complete_scoring(session, session_id)
-        else:
-            # Asynchronous: return rule-based scores immediately
-            return self._start_scoring_async(session, session_id)
+        # Always use synchronous scoring for Modal serverless compatibility
+        # Async background tasks are unreliable in serverless containers
+        return self._complete_scoring(session, session_id)
 
     def _complete_scoring(self, session, session_id: str) -> dict:
         """Complete full scoring (rule-based + AI) synchronously."""
@@ -372,59 +372,6 @@ class SimulationEngine:
             "scores": session.score,
             "debrief": session.debrief,
             "ai_ready": True,
-        }
-
-    def _start_scoring_async(self, session, session_id: str) -> dict:
-        """Start async scoring - return rule-based scores immediately."""
-        import asyncio
-        from src.simulation.scorer import _rule_based_score, generate_debrief
-
-        # Get rule-based scores immediately (no AI)
-        score_result = _rule_based_score(session)
-        session.score = score_result.to_dict()
-        session.score["ai_feedback"] = ""  # Placeholder
-        session.ai_pending = True  # Flag for polling
-
-        # Start AI scoring in background
-        async def run_ai_scoring():
-            try:
-                # Wait a bit for rule-based scores to be returned to client
-                await asyncio.sleep(0.5)
-
-                # Run AI scoring
-                from src.simulation.scorer import _ai_score
-                ai_result = _ai_score(session, self.agent)
-                session.score["ai_feedback"] = ai_result.ai_feedback
-
-                # Generate debrief
-                debrief_result = generate_debrief(session, ai_result, self.agent)
-                session.debrief = debrief_result.to_dict()
-
-                session.status = "scored"
-                session.completed_at = datetime.now().isoformat()
-                session.ai_pending = False
-
-                # Persist final session state
-                self._persist_session(session)
-
-                # Release LangChain message history
-                clear_session_history(session_id)
-            except Exception as e:
-                logger.warning("Async AI scoring failed: %s", e)
-                session.ai_pending = False
-                session.score["ai_feedback"] = "AI feedback unavailable"
-                # Persist error state
-                self._persist_session(session)
-
-        # Schedule background task
-        asyncio.create_task(run_ai_scoring())
-
-        return {
-            "session_id": session_id,
-            "submitted_at": datetime.now().isoformat(),
-            "scores": session.score,
-            "debrief": {"status": "generating"},
-            "ai_ready": False,
         }
 
     # ── Helpers ────────────────────────────────────────────────────────────────
