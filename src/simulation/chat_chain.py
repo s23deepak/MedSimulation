@@ -92,16 +92,22 @@ Patient: "Just my blood pressure pill - lisinopril, I think 10mg? Take it every 
 """
 
 from datetime import datetime
+from langchain_core.runnables import RunnableLambda
+
+def _get_current_date() -> str:
+    """Return current date in readable format for patient context."""
+    return datetime.now().strftime("%A, %B %d, %Y")
+
+def _inject_date(input_dict: dict) -> dict:
+    """Inject current date into the input dictionary."""
+    input_dict["current_date"] = _get_current_date()
+    return input_dict
 
 _PATIENT_PROMPT = ChatPromptTemplate.from_messages([
     ("system", _PATIENT_SYSTEM),
     MessagesPlaceholder(variable_name="history"),   # ← prior turns injected here
     ("human", "{question}"),
 ])
-
-def _get_current_date() -> str:
-    """Return current date in readable format for patient context."""
-    return datetime.now().strftime("%A, %B %d, %Y")
 
 
 # ── LangChain Runnable wrapping MedGemma ─────────────────────────────────────
@@ -218,13 +224,11 @@ def build_patient_chain(agent: Any) -> RunnableWithMessageHistory:
       persona remains consistent across the entire session.
     - Injects current date for temporal consistency in patient responses.
     """
-    chain = _PATIENT_PROMPT | MedGemmaRunnable(agent)
+    # Inject current date before passing to prompt
+    chain = RunnableLambda(_inject_date) | _PATIENT_PROMPT | MedGemmaRunnable(agent)
     return RunnableWithMessageHistory(
         chain,
         get_session_history,
         input_messages_key="question",
         history_messages_key="history",
-        override_input={
-            "current_date": _get_current_date(),
-        },
     )
