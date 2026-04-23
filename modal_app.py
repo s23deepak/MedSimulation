@@ -308,11 +308,14 @@ class VLLMService:
     async def generate(
         self,
         prompt: str,
-        max_tokens: int = 256,
+        max_tokens: int = 1024,
         temperature: float = 0.7,
         request_id: str | None = None,
     ) -> str:
-        """Generate via HTTP to vLLM serve."""
+        """Generate via HTTP to vLLM serve.
+
+        Default max_tokens increased to 1024 for long-form outputs like debriefs.
+        """
         import aiohttp
         payload = {
             "model": "medgemma",
@@ -336,11 +339,14 @@ class VLLMService:
     async def chat(
         self,
         messages: list[dict[str, str]],
-        max_tokens: int = 256,
+        max_tokens: int = 1024,
         temperature: float = 0.7,
         request_id: str | None = None,
     ) -> str:
-        """Chat completion via HTTP to vLLM serve."""
+        """Chat completion via HTTP to vLLM serve.
+
+        Default max_tokens increased to 1024 for long-form outputs like debriefs.
+        """
         import aiohttp
         payload = {
             "model": "medgemma",

@@ -233,11 +233,13 @@ class VLLMClient:
         self,
         prompt: str,
         temperature: float = 0.3,
-        max_tokens: int = 256,
+        max_tokens: int = 1024,
     ) -> str:
         """
         Sync generation matching VLLMModelManager.generate_medgemma() signature.
         Used by MedGemmaRunnable's `hasattr(agent, 'generate_medgemma')` path.
+
+        Default max_tokens increased to 1024 for long-form outputs like debriefs.
         """
         try:
             loop = asyncio.get_running_loop()
@@ -257,12 +259,18 @@ class VLLMClient:
                 self.generate_async(prompt, temperature=temperature, max_tokens=max_tokens)
             )
 
-    def process_query(self, query: str, patient_context: dict | None = None) -> dict:
+    def process_query(self, query: str, patient_context: dict | None = None, max_tokens: int = 1024) -> dict:
         """
         Sync interface matching MedGemmaAgent.process_query() signature.
         Used by scorer.py and debrief.py.
+
+        Parameters
+        ----------
+        max_tokens : int
+            Maximum tokens to generate. Default 1024 for debrief/scoring prompts.
+            Use 256 for shorter responses.
         """
-        response = self.chat(query)
+        response = self.generate_medgemma(query, max_tokens=max_tokens)
         return {"response": response}
 
     # ── Repr ──────────────────────────────────────────────────────────────────
@@ -310,9 +318,13 @@ class ModalVLLMClient:
         self,
         prompt: str,
         temperature: float = 0.7,
-        max_tokens: int = 512,
+        max_tokens: int = 1024,
         **kwargs,
     ) -> str:
+        """Generate completion for a prompt.
+
+        Default max_tokens increased to 1024 for long-form outputs like debriefs.
+        """
         return await self._svc.generate.remote.aio(
             prompt, max_tokens=max_tokens, temperature=temperature
         )
@@ -357,12 +369,27 @@ class ModalVLLMClient:
         self,
         prompt: str,
         temperature: float = 0.3,
-        max_tokens: int = 256,
+        max_tokens: int = 1024,
     ) -> str:
+        """Generate response for MedGemma prompts (scoring, debrief, case generation).
+
+        Default max_tokens increased to 1024 to support long-form outputs like
+        clinical debriefs which require 8 sections with 2-3 sentences each.
+        """
         return self._run_sync(self.generate_async(prompt, temperature=temperature, max_tokens=max_tokens))
 
-    def process_query(self, query: str, patient_context: dict | None = None) -> dict:
-        return {"response": self.chat(query)}
+    def process_query(self, query: str, patient_context: dict | None = None, max_tokens: int = 1024) -> dict:
+        """
+        Sync interface matching MedGemmaAgent.process_query() signature.
+        Used by scorer.py and debrief.py.
+
+        Parameters
+        ----------
+        max_tokens : int
+            Maximum tokens to generate. Default 1024 for debrief/scoring prompts.
+            Use 256 for shorter responses.
+        """
+        return {"response": self.generate_medgemma(query, max_tokens=max_tokens)}
 
     def __repr__(self) -> str:
         return f"ModalVLLMClient(model={self.model!r})"

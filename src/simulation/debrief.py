@@ -56,7 +56,7 @@ Please provide a structured debrief with the following sections:
 7. **Missed Opportunities**: Important things the resident did not consider
 8. **Coaching Points**: 2-3 actionable learning points for next time
 
-Be constructive, specific, and educational in your feedback.
+Be constructive, specific, and educational in your feedback. Provide complete responses for all sections - do not truncate or cut off mid-sentence.
 """
 
 
