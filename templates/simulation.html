@@ -1725,32 +1725,56 @@ async function loadCases() {
             document.getElementById('correctDiagnosis').textContent = scores.correct_diagnosis;
             document.getElementById('correctManagement').innerHTML = scores.correct_management.map(m => `<div class="mgmt-item">✓ ${escapeHtml(m)}</div>`).join('');
 
-            // Clinical feedback - will be filled by polling
+            // Clinical feedback - show immediately if available (data.ai_feedback, not scores.ai_feedback)
             const aiBlock = document.getElementById('aiFeedbackBlock');
             if (aiBlock) {
-                aiBlock.style.display = 'block';
-                if (!scores.ai_feedback) {
-                    // Placeholder - polling will fill this
-                    document.getElementById('aiFeedbackText').innerHTML = '';
+                if (data.ai_feedback && data.ai_feedback.trim().length > 10) {
+                    aiBlock.style.display = 'block';
+                    document.getElementById('aiFeedbackText').innerHTML = formatAiFeedback(data.ai_feedback);
+                } else {
+                    aiBlock.style.display = 'none';
                 }
             }
 
-            // Clinical narrative - hidden until ready
+            // Clinical narrative - show if available
             const aiNarrativeBlock = document.getElementById('aiNarrativeBlock');
             if (aiNarrativeBlock) {
-                aiNarrativeBlock.style.display = 'none';
+                if (debrief.ai_narrative && debrief.ai_narrative.trim().length > 10) {
+                    aiNarrativeBlock.style.display = 'block';
+                    document.getElementById('aiNarrativeText').innerHTML = formatAiFeedback(debrief.ai_narrative);
+                } else {
+                    aiNarrativeBlock.style.display = 'none';
+                }
             }
 
             // Debrief summary
-            document.getElementById('debriefSummary').textContent = debrief.summary || '';
+            const debriefBlock = document.getElementById('debriefBlock');
+            if (debriefBlock) {
+                if (debrief.summary && debrief.summary.trim().length > 0) {
+                    debriefBlock.style.display = 'block';
+                    document.getElementById('debriefSummary').textContent = debrief.summary;
+                } else {
+                    debriefBlock.style.display = 'none';
+                }
+            }
 
             // Learning points
             const lp = document.getElementById('learningPoints');
-            lp.innerHTML = (scores.key_learning_points || []).map(p => `<div class="learning-point"><span class="lp-icon">→</span><span>${escapeHtml(p)}</span></div>`).join('');
+            const learningPoints = scores.key_learning_points || [];
+            if (learningPoints.length > 0) {
+                lp.innerHTML = learningPoints.map(p => `<div class="learning-point"><span class="lp-icon">→</span><span>${escapeHtml(p)}</span></div>`).join('');
+            } else {
+                lp.innerHTML = '<p class="text-muted">No learning points available for this case.</p>';
+            }
 
-            // Coaching points - cleared, will be filled by polling
+            // Coaching points - show immediately from debrief.coaching_points
             const cp = document.getElementById('coachingPoints');
-            if (cp) cp.innerHTML = '';
+            const coachingPoints = debrief.coaching_points || [];
+            if (coachingPoints.length > 0) {
+                cp.innerHTML = coachingPoints.map(p => `<div class="learning-point"><span class="lp-icon">💡</span><span>${escapeHtml(p)}</span></div>`).join('');
+            } else {
+                cp.innerHTML = '<p class="text-muted">Review the learning points above for key takeaways.</p>';
+            }
 
             showScreen('screen-results');
         }
