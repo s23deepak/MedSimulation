@@ -79,7 +79,10 @@ image = (
         "requests>=2.31.0",  # For vLLM sleep/wake/warmup helpers
     )
     # HF_HOME → model volume so weights are cached there automatically
-    .env({"HF_HOME": "/models/hf_cache"})
+    .env({
+        "HF_HOME": "/models/hf_cache",
+        "HF_XET_HIGH_PERFORMANCE": "1",
+    })
     .run_commands([
         "mkdir -p /root/data/imaging/dicom",
         "mkdir -p /root/.cache/vllm",
@@ -259,27 +262,45 @@ class VLLMService:
             "--served-model-name", "medgemma",
             "--disable-custom-all-reduce",  # Reduces NCCL noise
             "--enable-prefix-caching",      # RadixAttention for KV cache reuse
+            "--enable-sleep-mode",          # Required for GPU memory snapshots
         ]
 
-        # Suppress PyTorch distributed warnings (NCCL heartbeat, TCPStore)
-        # These are harmless but noisy - see GitHub issues for vLLM/PyTorch
         env = {
             **os.environ,
-            "NCCL_DEBUG": "WARN",     # Suppress NCCL info/debug logs
+            # Required for sleep mode (GPU snapshot support)
+            "VLLM_SERVER_DEV_MODE": "1",
+            # Disables the NCCL heartbeat monitor thread that spams
+            # "Failed to check should_dump flag" and TCPStore broken pipe errors
+            "TORCH_NCCL_ENABLE_MONITORING": "0",
+            # Suppress NCCL logs entirely (single-GPU mode doesn't need distributed)
+            "NCCL_DEBUG": "ERROR",
+            "NCCL_DEBUG_SUBSYS": "NONE",
+            # Suppress PyTorch distributed warnings
+            "TORCH_DISTRIBUTED_DEBUG": "OFF",
+            # Suppress vLLM Python-level logs below WARNING
+            "VLLM_LOGGING_LEVEL": "WARNING",
+            # Suppress HuggingFace tokenizer parallelism fork warnings
+            "TOKENIZERS_PARALLELISM": "false",
         }
-         # Explicitly remove TORCH_LOGS if inherited from environment
+
+        # Explicitly remove noisy inherited env vars
         env.pop("TORCH_LOGS", None)
+
         print(f"vLLM cmd: {' '.join(cmd)}")
-        self.vllm_proc = subprocess.Popen(cmd, env=env)
+        self.vllm_proc = subprocess.Popen(cmd, env=env, stderr=subprocess.DEVNULL)
         wait_for_vllm(VLLM_PORT, timeout=300)
         print("vLLM server ready")
         warmup_vllm(VLLM_PORT)
-        print("vLLM warmup complete - snapshot will be created")
+        print("vLLM warmup complete")
+        sleep_vllm(VLLM_PORT, level=1)
+        print("vLLM entered sleep mode - snapshot will be created")
 
     @modal.enter(snap=False)
     def wake_up(self):
         """Ensure vLLM is ready after snapshot restore."""
-        # Server should already be running after restore
+        # Wake vLLM from sleep mode first
+        wake_vllm(VLLM_PORT)
+        # Then verify server is responsive
         wait_for_vllm(VLLM_PORT, timeout=60)
         print("vLLM ready after restore")
 
@@ -350,11 +371,8 @@ class VLLMService:
             ) as resp:
                 return {"status": "ok" if resp.status == 200 else "unhealthy"}
 
-    @modal.exit()
-    def stop(self):
-        """Cleanup vLLM process on shutdown."""
-        if hasattr(self, "vllm_proc") and self.vllm_proc:
-            self.vllm_proc.terminate()
+    # NOTE: No @modal.exit() handler - vLLM process must stay alive for GPU snapshot
+    # Modal will clean up the process automatically when the container is destroyed
 
 
 # ── Web Application (FastAPI + VLLMService) ─────────────────────────────────────
