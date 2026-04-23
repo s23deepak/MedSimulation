@@ -39,8 +39,10 @@ Management plan submitted: {management_submitted}
 CHRONOLOGICAL ACTION SEQUENCE (important for assessing clinical reasoning order):
 {action_sequence}
 
-Score each domain on the given maximum points and provide specific feedback:
+## Task
+Provide constructive clinical feedback to help this resident improve. Write in a professional, educational tone as you would in a real clinical debrief.
 
+## Scoring Guidelines
 1. HISTORY TAKING (max {w_history} pts): Did the resident ask the key discriminating questions?
 2. PHYSICAL EXAMINATION (max {w_exam} pts): Did they examine the relevant systems? Was exam performed AFTER adequate history taking?
 3. INVESTIGATIONS (max {w_inv} pts): Were the key investigations ordered? Any unnecessary ones?
@@ -49,13 +51,26 @@ Score each domain on the given maximum points and provide specific feedback:
 
 Note: Penalise if physical examination was performed before the patient had a chance to explain their symptoms (fewer than 3 history questions asked first). Good clinical practice requires history before examination.
 
-Also provide:
-- OVERALL FEEDBACK: 2-3 sentences of constructive summary
-- MISSED DIAGNOSES: Any important differentials they should have considered
-- CRITICAL ERRORS: Any dangerous or harmful decisions made
-- KEY LEARNING POINTS: 2-3 most important teaching points for this case
+## Required Output Sections
+Write 2-3 sentences for each section:
 
-Format your response as structured text with clear section headers.
+**Overall Assessment:** Brief summary of performance quality.
+
+**History Feedback:** What history taking was done well and what was missed.
+
+**Exam Feedback:** Physical examination strengths and gaps.
+
+**Investigation Feedback:** Appropriateness of tests ordered, cost considerations.
+
+**Diagnosis Feedback:** Assessment of diagnostic reasoning.
+
+**Management Feedback:** Treatment plan analysis and guideline adherence.
+
+**Missed Opportunities:** Important clinical steps not taken.
+
+**Coaching Points:** 2-3 actionable learning points for next time.
+
+Write in clear prose paragraphs. Do NOT include code, markdown fences, or JSON.
 """
 
 
@@ -159,16 +174,19 @@ def _ai_score(session: Any, agent: Any) -> ScoreResult:
         # Validate AI output - reject code snippets or garbage
         if feedback_text:
             # Check for code-like output (Python keywords, def statements, etc.)
-            code_indicators = ["def ", "import ", "print(", "```python"]
+            code_indicators = ["def ", "import ", "print(", "```python", "class "]
             is_code = any(indicator in feedback_text for indicator in code_indicators)
 
-            # Check for minimum meaningful content (at least 50 chars and contains sentences)
-            is_too_short = len(feedback_text.strip()) < 50
-            has_sentences = "." in feedback_text or "!" in feedback_text
+            # Check for minimum meaningful content (at least 30 chars and contains sentences)
+            is_too_short = len(feedback_text.strip()) < 30
+            has_sentences = "." in feedback_text or "!" in feedback_text or ":" in feedback_text
 
-            if is_code or is_too_short or not has_sentences:
-                logger.warning("AI feedback rejected (garbage output): %s...", feedback_text[:100])
+            if is_code:
+                logger.warning("AI feedback rejected (code detected): %s...", feedback_text[:100])
                 feedback_text = ""  # Fall back to rule-based only
+            elif is_too_short:
+                logger.warning("AI feedback rejected (too short): %s...", feedback_text[:100])
+                feedback_text = ""
 
         if feedback_text:
             numeric = _rule_based_score(session)

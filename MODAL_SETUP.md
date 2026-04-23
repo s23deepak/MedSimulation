@@ -1,12 +1,13 @@
-# Deploy MedGemma 4B to Modal (Pay-Per-Use GPU)
+# Deploy MedGemma 4B to Modal (All-in-One with GPU Snapshots)
 
 Modal is perfect for your use case: **you only pay when the GPU is actually used**.
 
 ## Cost Estimate
 
-- **T4 GPU**: ~$0.0006/second = ~$0.03 per case simulation
-- **Monthly**: ~$2-5 for moderate usage (10-20 simulations/day)
+- **A10G GPU**: ~$0.60/hour = ~$0.03 per case simulation
+- **Monthly**: ~$20-40 for moderate usage (2-3 hrs/day)
 - **Idle**: $0 (spins down after 5 minutes)
+- **Cold Start**: ~5-10 seconds with GPU snapshots enabled
 
 ---
 
@@ -21,7 +22,7 @@ Modal is perfect for your use case: **you only pay when the GPU is actually used
 ## Step 2: Install Modal CLI
 
 ```bash
-pip install modal
+uv add modal
 modal token new
 ```
 
@@ -29,21 +30,24 @@ This opens a browser window to authenticate.
 
 ---
 
-## Step 3: Add HuggingFace Token (for MedGemma)
+## Step 3: Create Secrets (HuggingFace + OpenAI)
 
 MedGemma requires accepting terms on HuggingFace:
 
 1. Go to https://huggingface.co/google/medgemma-4b-it
 2. Click "Accept terms" (you may need to request access)
 3. Get your HF token: https://huggingface.co/settings/tokens
-4. Store in Modal:
+4. Get OpenAI key for TTS (optional): https://platform.openai.com/api-keys
+5. Store in Modal:
    ```bash
-   modal secret create huggingface --from-dict '{"HF_TOKEN": "hf_xxxxx"}'
+   modal secret create medsimulation-secrets \
+     HF_TOKEN=hf_xxxxx \
+     OPENAI_API_KEY=sk_xxxxx
    ```
 
 ---
 
-## Step 3.5: Pre-cache Model Weights (one-time, strongly recommended)
+## Step 4: Pre-cache Model Weights (one-time, strongly recommended)
 
 This downloads MedGemma 4B into a persistent Modal Volume so containers never
 re-download it from HuggingFace on cold starts. **Run once after the first deploy.**
@@ -60,71 +64,41 @@ Without this step, each cold start downloads the model (~1–2 extra minutes).
 
 ---
 
-## Step 4: Deploy vLLM Server
+## Step 5: Deploy the All-in-One App
 
 ```bash
-modal deploy modal_vllm.py
+modal deploy modal_app.py
 ```
 
 You'll see output like:
 ```
-✓ Deployed medsimulation-vllm to prod
-✓ Endpoint: https://your-username--medsimulation-vllm-server.modal.run
+✓ Deployed medsimulation to prod
+✓ Endpoint: https://your-username--medsimulation-serve.modal.run
 ```
 
-**Your API URL**: `https://your-username--medsimulation-vllm-server.modal.run/v1`
-
----
-
-## Step 5: Configure MedSimulation
-
-Set the following environment variables for your Modal web app deployment (or a `.env` file for local testing):
-
-```bash
-VLLM_MODE=cloud
-VLLM_CLOUD_URL=https://your-username--medsimulation-vllm-server.modal.run/v1
-VLLM_CLOUD_API_KEY=your-modal-api-key
-VLLM_MODEL=google/medgemma-4b-it
-```
-
-To inject secrets into Modal, use:
-```bash
-modal secret create medsimulation-env \
-  --from-dict '{"VLLM_CLOUD_URL": "...", "VLLM_CLOUD_API_KEY": "ak-xxxxx", "VLLM_MODEL": "google/medgemma-4b-it"}'
-```
-
-### Get Modal API Key:
-1. Go to https://modal.com/settings
-2. Click "Create new API key"
-3. Copy the key (starts with `ak-`)
-
----
-
-## Step 6: Test It
-
-```bash
-# Test the Modal endpoint
-curl https://your-username--medsimulation-vllm-server.modal.run/v1/models \
-  -H "Authorization: Bearer ak-xxxxx"
-
-# Should return model info
-```
-
----
-
-## Step 7: Deploy the Web App to Modal
-
-```bash
-modal deploy modal_web.py
-```
-
-You'll see output like:
-```
-✓ Deployed medsimulation-web to prod
-✓ Endpoint: https://your-username--medsimulation-web.modal.run
-```
+**Your API URL**: `https://your-username--medsimulation-serve.modal.run`
 
 Open the endpoint URL in your browser and test a simulation!
+
+---
+
+## Step 6: Configure (Optional)
+
+Edit `.env.modal` to customize:
+
+```bash
+# Model selection
+VLLM_MODEL=google/medgemma-4b-it
+
+# GPU tuning
+VLLM_GPU_MEMORY=0.7        # Higher = more model, less KV cache
+VLLM_MAX_MODEL_LEN=4096    # Context window size
+
+# Use cloud LLM instead of local GPU (cheapest option)
+VLLM_MODE=cloud
+VLLM_CLOUD_URL=https://api.together.xyz/v1
+VLLM_CLOUD_API_KEY=your_together_key
+```
 
 ---
 
@@ -142,23 +116,53 @@ In Modal dashboard:
 ### "Model not found"
 Make sure you accepted MedGemma terms on HuggingFace and added the secret.
 
-### "GPU unavailable"
-Modal may take ~15–30 seconds to spin up after idle (cold start). With GPU
-snapshots enabled this is much faster than before. First-ever cold start (before
-the snapshot is taken) may still take 1–2 minutes.
+### "GPU unavailable" or slow cold start
+First-ever cold start (before snapshot is taken) may take 1–2 minutes. After that, GPU snapshots enable ~5-10 second restores.
+
+If snapshots aren't working:
+1. Check that `--enable-sleep-mode` is in the vLLM command
+2. Verify `VLLM_SERVER_DEV_MODE=1` is set
+3. Ensure `sleep_vllm()` is called after warmup
 
 ### "Too expensive"
-Reduce `container_idle_timeout` in `modal_vllm.py` from 300 to 120 seconds.
+- Reduce `scaledown_window` from 300 to 120 seconds
+- Use CPU mode with cloud LLM (`VLLM_MODE=cloud`)
+- Pre-seed cases to reduce on-the-fly generation time
 
 ---
 
-## Alternative: Use a Cheaper Model
+## Alternative: CPU-Only Deployment
 
-If MedGemma access is slow to approve, you can temporarily use:
+For lowest cost (no GPU), use cloud LLM providers:
 
-```python
-# In modal_vllm.py, change:
-model = os.getenv("MODEL_NAME", "google/gemma-2-9b-it")  # More available
+```bash
+# 1. Set up .env.modal for cloud mode
+VLLM_MODE=cloud
+VLLM_CLOUD_URL=https://api.together.xyz/v1
+VLLM_CLOUD_API_KEY=your_together_key
+VLLM_MODEL=google/gemma-2b-it
+
+# 2. Deploy
+modal run modal_app.py --cpu
+```
+
+**Cost:** ~$0.05/hr + token costs (~$5-15/month total)
+
+---
+
+## Pre-seeding Cases
+
+Generate cases ahead of time to avoid on-the-fly generation delays:
+
+```bash
+# Generate specific topics
+python preseed_cases.py --topics "chest pain,knee injury" --count 3
+
+# Generate default topics (50+ conditions)
+python preseed_cases.py --default --count 2
+
+# List existing cases
+python preseed_cases.py --list
 ```
 
 ---
@@ -166,19 +170,52 @@ model = os.getenv("MODEL_NAME", "google/gemma-2-9b-it")  # More available
 ## Summary: Complete Flow
 
 ```
-User on Phone        Modal (Web App)            Modal (GPU / vLLM)
-     │                      │                           │
-     │  1. Open app         │                           │
-     │────────────────────->│                           │
-     │                      │                           │
-     │  2. Ask patient      │  3. Forward to vLLM       │
-     │────────────────────->│──────────────────────────>│
-     │                      │                           │
-     │                      │    4. GPU spins up (cold start ~30s)
-     │                      │    5. MedGemma generates response
-     │                      │                           │
-     │  6. Show response    │  7. Return text           │
-     │<────────────────────│<──────────────────────────│
-     │                      │                           │
-     │                      │                           │ 8. Idle → spin down
+User on Phone/Browser         Modal (All-in-One App)
+     │                              │
+     │  1. Open app                 │
+     │─────────────────────────────>│
+     │                              │ 2. FastAPI starts (CPU)
+     │                              │ 3. VLLMService wakes (GPU, snapshotted)
+     │                              │    - GPU snapshot restore: ~5-10s
+     │                              │    - Model weights cached in Volume
+     │                              │
+     │  2. Search topic             │
+     │─────────────────────────────>│
+     │                              │ 3. Generate case (vLLM)
+     │                              │    - Pre-seeded: instant
+     │                              │    - On-fly: ~30-60s
+     │                              │
+     │  3. Start simulation         │
+     │─────────────────────────────>│
+     │                              │ 4. AI patient responses (vLLM)
+     │                              │
+     │  4. Submit diagnosis         │
+     │─────────────────────────────>│
+     │                              │ 5. Score + debrief (vLLM)
+     │                              │
+     │  5. View results             │
+     │<─────────────────────────────│
+     │                              │
+     │                              │ 6. Idle 5 min → spin down
+     │                              │    Next request: fast snapshot restore
 ```
+
+---
+
+## What Changed (April 2026)
+
+### GPU Snapshot Fix
+- Added `--enable-sleep-mode` to vLLM command
+- Added `VLLM_SERVER_DEV_MODE=1` environment variable
+- Call `sleep_vllm()` after warmup (critical for clean snapshot state)
+- Removed `@modal.exit()` handler that was killing vLLM process
+- Updated `wake_up()` to call `wake_vllm()` before checking readiness
+
+**Result:** Cold start reduced from ~45 seconds to **~5-10 seconds**
+
+### Pre-seed Script
+- New `preseed_cases.py` for generating cases ahead of time
+- Supports batch generation with default topics
+- Saves to database for immediate use
+
+**Result:** Case generation time reduced from ~30-60s to **instant** (for pre-seeded cases)

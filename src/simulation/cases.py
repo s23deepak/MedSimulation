@@ -566,3 +566,39 @@ def list_cases() -> list[dict]:
         }
         for c in CASES.values()
     ]
+
+
+def save_case_to_db(case: ClinicalCase, directory: str | Path | None = None) -> Path:
+    """
+    Save a clinical case to JSON file for persistence.
+
+    Cases are stored in the cases/ directory and loaded on module init.
+
+    Parameters
+    ----------
+    case : ClinicalCase
+        The case to save
+    directory : Path, optional
+        Directory to save to (default: src/simulation/cases/)
+
+    Returns
+    -------
+    Path
+        Path to the saved JSON file
+    """
+    if directory is None:
+        directory = Path(__file__).parent / "cases"
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    case_file = directory / f"{case.case_id}.json"
+    case_data = case.to_dict()
+
+    with open(case_file, "w", encoding="utf-8") as f:
+        json.dump(case_data, f, indent=2, ensure_ascii=False)
+
+    # Also register in memory for immediate use
+    _register(case)
+
+    logger.info("Saved case %s to %s", case.case_id, case_file)
+    return case_file

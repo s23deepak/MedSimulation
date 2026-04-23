@@ -159,6 +159,18 @@ def _rule_based_debrief(session: Any, score: ScoreResult) -> DebriefResult:
     diag_fb = score.domain_feedback.get("diagnosis", "")
     mgmt_fb = score.domain_feedback.get("management", "")
 
+    # Generate domain feedback if empty
+    if not history_fb:
+        history_fb = f"Asked {len(session.history_questions)} history questions. {'Good coverage of key symptoms.' if len(session.history_questions) >= 5 else 'Consider asking more targeted questions about the presenting complaint.'}"
+    if not exam_fb:
+        exam_fb = f"Examined {len(session.exam_systems_viewed)} system(s). {'Appropriate systems reviewed.' if len(session.exam_systems_viewed) >= 2 else 'Consider examining additional relevant systems.'}"
+    if not inv_fb:
+        inv_fb = f"Ordered {len(session.investigations_ordered)} investigation(s). {'Appropriate workup for this presentation.' if len(session.investigations_ordered) >= 3 else 'Consider whether additional tests are needed.'}"
+    if not diag_fb:
+        diag_fb = f"Diagnosis: {session.diagnosis_submitted or 'Not submitted'}. {'Correct diagnosis.' if session.diagnosis_submitted.lower() == case.correct_diagnosis.lower() else f'Expected: {case.correct_diagnosis}'}"
+    if not mgmt_fb:
+        mgmt_fb = f"Management plan submitted with {len(session.management_submitted)} step(s). {'Aligns with guidelines.' if len(session.management_submitted) >= 3 else 'Consider more specific management steps.'}"
+
     # Missed opportunities — derive from what wasn't done
     missed: list[str] = []
     key_systems = list(case.physical_exam.keys())
@@ -174,6 +186,9 @@ def _rule_based_debrief(session: Any, score: ScoreResult) -> DebriefResult:
     if score.domain_scores.get("diagnosis", 0) == 0:
         missed.append(f"Correct diagnosis was: {case.correct_diagnosis}")
 
+    if not missed:
+        missed.append("No significant missed opportunities identified.")
+
     # Cost analysis
     inv_count = len(session.investigations_ordered)
     if inv_count <= 3:
@@ -184,7 +199,17 @@ def _rule_based_debrief(session: Any, score: ScoreResult) -> DebriefResult:
         cost_msg = f"Total investigations ordered: {inv_count}. Consider whether all tests were necessary."
 
     # Coaching points — always include key learning points from the case
-    coaching = case.key_learning_points[:3]
+    # Ensure we always have at least 2 coaching points
+    coaching = list(case.key_learning_points[:3]) if case.key_learning_points else []
+    if len(coaching) < 2:
+        # Add generic but useful coaching points
+        default_coaching = [
+            f"Review the clinical presentation and key features of {case.correct_diagnosis}.",
+            "Always consider appropriate differential diagnoses before committing to a final diagnosis.",
+            "Ensure investigations are targeted to confirm or rule out specific diagnoses.",
+        ]
+        while len(coaching) < 2:
+            coaching.append(default_coaching[len(coaching)])
 
     return DebriefResult(
         summary=summary,

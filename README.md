@@ -169,7 +169,10 @@ modal secret create medsimulation-secrets \
     OPENAI_API_KEY=sk_your_key_here \
     FIRECRAWL_API_KEY=fc_your_key_here  # Optional, for publisher image extraction
 
-# 4. Deploy!
+# 4. Pre-download model weights (run once)
+modal run modal_app.py::download_model
+
+# 5. Deploy!
 modal deploy modal_app.py
 ```
 
@@ -188,12 +191,23 @@ https://<your-workspace>--medsimulation-serve.modal.run
 
 ### Cost Management
 
-The deployment uses `container_idle_timeout=300`, meaning:
+The deployment uses `scaledown_window=300`, meaning:
 - Container shuts down after 5 minutes of inactivity
 - You only pay for actual usage time
-- Cold start takes ~30-60 seconds when accessed after idle
+- **Cold start with GPU snapshots: ~5-10 seconds** (after first warmup)
 
 **Estimated monthly cost for demo use (2-3 hrs/day): $20-40**
+
+### Cold Start Optimization
+
+The deployment uses several techniques to minimize cold start latency:
+
+1. **Model Weight Caching**: Pre-downloaded weights stored in Modal Volumes
+2. **GPU Memory Snapshots**: Captures GPU state after warmup, restores in ~5-10s
+3. **vLLM Sleep Mode**: Offloads weights to CPU during idle, enabling fast snapshot
+4. **Two-Tier Architecture**: CPU FastAPI proxy + GPU VLLMService (scales independently)
+
+See `BLOG_POST_DRAFT.md` for detailed technical deep-dive.
 
 ### Configuration
 
@@ -218,6 +232,21 @@ VLLM_CLOUD_API_KEY=your_key
 Case data, database, and imaging files are stored in a Modal Volume that persists across deployments:
 - Database: `/data/medsim.db`
 - Imaging: `/data/imaging/`
+
+### Pre-seeding Cases
+
+Generate cases ahead of time to avoid on-the-fly generation delays:
+
+```bash
+# Generate specific topics
+python preseed_cases.py --topics "chest pain,knee injury" --count 3
+
+# Generate default topics (50+ conditions)
+python preseed_cases.py --default --count 2
+
+# List existing cases
+python preseed_cases.py --list
+```
 
 ### Troubleshooting
 
@@ -337,11 +366,18 @@ MedSimulation/
 
 ### Documentation & Review
 - ~~**Full session transcript export**~~: Implemented — every completed session is exportable as a structured PDF (multi-section with score table and debrief narrative) or JSON via `GET /api/simulation/session/{session_id}/export/{pdf|json}`. Download buttons are available in the results screen.
+- ~~**Clinical Feedback & Coaching Points empty**~~: Fixed — rule-based debrief now generates fallback content for all sections when AI feedback is unavailable or too short.
 
 ### Infrastructure (Context Window)
 - **Context sliding for patient conversation**: medgemma-4b-it has a 4096-token context window. Long simulations (>25 exchanges) will eventually hit the limit. Implement a sliding-window trim in `chat_chain.py` — keep system prompt + last N turn pairs, dropping older history at inference time while preserving it in memory for scoring/debrief.
 - **vLLM context length**: Default `VLLM_MAX_MODEL_LEN=4096`. For better case generation quality, restart with `VLLM_MAX_MODEL_LEN=8192 bash scripts/start_vllm.sh`.
-- **Session Checkpoint Agent**: Background agent that periodically persists in-progress sessions to SQLite. `save_session()` already exists in `database.py` but is never called — a server restart currently drops all active sessions.
+- **Session Checkpoint Agent**: Background agent that periodically persists in-progress sessions to SQLite. `save_session()` already exists in `database.py` but is only called on session completion — a server restart currently drops all active sessions.
+
+### Case Generation Quality
+- ~~**Physical exam findings generic**~~: Fixed — prompt now requires specific findings (e.g., "Inspection: moderate swelling, Palpation: MCL tenderness, ROM: limited flexion")
+- ~~**Key learning points missing**~~: Fixed — prompt explicitly requires 5 specific teaching points
+- ~~**JSON parsing failures**~~: Fixed — improved `_repair_json()` handles concatenated objects and colons in keys
+- **Pre-seeding for faster response**: Added `preseed_cases.py` script to generate cases ahead of time (see Usage below)
 
 ## 🤖 TODO - Agentic Workflow
 

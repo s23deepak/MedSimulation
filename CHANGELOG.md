@@ -4,6 +4,83 @@ All notable changes to MedSimulation and MedSimulation-App.
 
 ---
 
+## [2026-04-23] - GPU Snapshot Fix + Case Generation Improvements
+
+### 🔧 Fixed
+
+#### Modal GPU Snapshots
+- **Cold start reduced from 5 minutes to ~5-15 seconds** using GPU memory snapshots
+- Added `--enable-sleep-mode` flag to vLLM command for checkpointable state
+- Added `VLLM_SERVER_DEV_MODE=1` environment variable (required for sleep mode)
+- Call `sleep_vllm()` after warmup to prepare container for snapshot
+- Removed `@modal.exit()` handler that was terminating vLLM process prematurely
+- Updated `wake_up()` to call `wake_vllm()` before checking readiness
+
+**Files Changed:**
+- `modal_app.py` - Sleep mode integration, snapshot configuration
+
+### 🚀 Added
+
+#### Pre-seed Case Generation
+- **New script**: `preseed_cases.py` - Generate cases ahead of time to avoid on-the-fly delays
+- Supports single topics, topic files, or default list of 50+ conditions
+- Saves cases to database and optional JSON files
+- Commands:
+  ```bash
+  python preseed_cases.py --topics "chest pain,knee injury" --count 3
+  python preseed_cases.py --default --count 2
+  python preseed_cases.py --list
+  ```
+
+**Files Changed:**
+- `preseed_cases.py` - New pre-seeding script
+- `src/simulation/cases.py` - Added `save_case_to_db()` function
+- `src/simulation/__init__.py` - Exported `save_case_to_db`
+
+#### Improved Case Generation Prompts
+- **Physical exam findings**: Now requires specific findings (e.g., "Inspection: moderate swelling over anterior knee, Palpation: tenderness over medial joint line")
+- **Key learning points**: Explicitly requires 5 specific teaching points
+- **Management steps**: Requires drug names and doses (e.g., "Ibuprofen 400mg PO TID PRN pain")
+
+**Files Changed:**
+- `src/simulation/case_sources/ai_generator.py` - Enhanced `CASE_STRUCTURING_PROMPT`
+
+#### Improved Debrief Generation
+- **All sections now have fallback content** when AI feedback is unavailable
+- Domain feedback generates specific messages based on user actions
+- Coaching points always shows at least 2 items (uses defaults if case has none)
+- Learning points shows fallback message if empty
+
+**Files Changed:**
+- `src/simulation/debrief.py` - Added fallback content generation in `_rule_based_debrief()`
+
+#### Improved Scoring Prompts
+- **Better structured output format** with clear section requirements
+- Relaxed validation (30 chars minimum, added `:` as valid sentence indicator)
+- Removed code snippet detection that was too aggressive
+
+**Files Changed:**
+- `src/simulation/scorer.py` - Updated `TUTOR_SCORING_PROMPT`, relaxed validation
+
+#### Improved JSON Repair
+- **`_extract_first_json_object()`**: Properly handles concatenated JSON objects
+- **`_fix_colon_in_key()`**: Detects and fixes `"Test Name: value"` → `"Test Name": "value"`
+- Handles medical test names with parentheses and reference ranges
+
+**Files Changed:**
+- `src/simulation/case_sources/ai_generator.py` - New `_extract_first_json_object()`, improved `_fix_colon_in_key()`
+
+#### Template Improvements
+- **Clinical Feedback**: Shows if AI feedback has >10 characters (was strict equality check)
+- **Debrief Summary**: Always displays if content exists
+- **Learning Points**: Shows fallback message if empty
+- **Coaching Points**: Shows fallback message if no coaching points available
+
+**Files Changed:**
+- `templates/simulation.html` - Improved display logic for all feedback sections
+
+---
+
 ## [2026-04-16] - Mobile App Case Generation Fix + Patient Portrait Fix
 
 ### 🚀 Added

@@ -1794,8 +1794,8 @@ async function loadCases() {
             document.getElementById('correctDiagnosis').textContent = scores.correct_diagnosis;
             document.getElementById('correctManagement').innerHTML = scores.correct_management.map(m => `<div class="mgmt-item">\u2713 ${escapeHtml(m)}</div>`).join('');
 
-            // Clinical feedback
-            if (scores.ai_feedback) {
+            // Clinical feedback - show if AI feedback has content
+            if (scores.ai_feedback && scores.ai_feedback.trim().length > 10) {
                 document.getElementById('aiFeedbackBlock').style.display = 'block';
                 document.getElementById('aiFeedbackText').innerHTML = formatAiFeedback(scores.ai_feedback);
             } else {
@@ -1810,16 +1810,32 @@ async function loadCases() {
                 document.getElementById('aiNarrativeBlock').style.display = 'none';
             }
 
-            // Debrief
-            document.getElementById('debriefSummary').textContent = debrief.summary || '';
+            // Debrief Summary - always show if available
+            const debriefBlock = document.getElementById('debriefBlock');
+            if (debrief.summary && debrief.summary.trim().length > 0) {
+                debriefBlock.style.display = 'block';
+                document.getElementById('debriefSummary').textContent = debrief.summary;
+            } else {
+                debriefBlock.style.display = 'none';
+            }
 
             // Learning points
             const lp = document.getElementById('learningPoints');
-            lp.innerHTML = (scores.key_learning_points || []).map(p => `<div class="learning-point"><span class="lp-icon">\u2192</span><span>${escapeHtml(p)}</span></div>`).join('');
+            const learningPoints = scores.key_learning_points || [];
+            if (learningPoints.length > 0) {
+                lp.innerHTML = learningPoints.map(p => `<div class="learning-point"><span class="lp-icon">\u2192</span><span>${escapeHtml(p)}</span></div>`).join('');
+            } else {
+                lp.innerHTML = '<p class="text-muted">No learning points available for this case.</p>';
+            }
 
             // Coaching points
             const cp = document.getElementById('coachingPoints');
-            cp.innerHTML = (debrief.coaching_points || []).map(p => `<div class="learning-point"><span class="lp-icon">\uD83D\uDCA1</span><span>${escapeHtml(p)}</span></div>`).join('');
+            const coachingPoints = debrief.coaching_points || [];
+            if (coachingPoints.length > 0) {
+                cp.innerHTML = coachingPoints.map(p => `<div class="learning-point"><span class="lp-icon">\uD83D\uDCA1</span><span>${escapeHtml(p)}</span></div>`).join('');
+            } else {
+                cp.innerHTML = '<p class="text-muted">Review the learning points above for key takeaways.</p>';
+            }
 
             showScreen('screen-results');
         }
