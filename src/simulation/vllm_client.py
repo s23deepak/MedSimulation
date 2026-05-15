@@ -120,7 +120,7 @@ class VLLMClient:
 
     async def chat_async(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         temperature: float = 0.7,
         max_tokens: int = 512,
         timeout: float | None = None,
@@ -183,7 +183,7 @@ class VLLMClient:
 
     def sync_chat_messages(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         temperature: float = 0.7,
         max_tokens: int = 512,
     ) -> str:
@@ -299,7 +299,7 @@ class ModalVLLMClient:
 
     async def chat_async(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         temperature: float = 0.7,
         max_tokens: int = 256,
         **kwargs,
@@ -359,7 +359,7 @@ class ModalVLLMClient:
 
     def sync_chat_messages(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         temperature: float = 0.7,
         max_tokens: int = 512,
     ) -> str:

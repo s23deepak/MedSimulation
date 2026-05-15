@@ -128,6 +128,11 @@ class MedGemmaRunnable(Runnable):
     def __init__(self, agent: Any) -> None:
         self.agent = agent
 
+    @staticmethod
+    def _text_content_parts(content: Any) -> list[dict[str, str]]:
+        """Format text for MedGemma/Gemma chat templates."""
+        return [{"type": "text", "text": str(content)}]
+
     def invoke(
         self,
         input: PromptValue | list[BaseMessage],
@@ -146,11 +151,20 @@ class MedGemmaRunnable(Runnable):
                 oai_messages = []
                 for msg in messages:
                     if msg.type == "system":
-                        oai_messages.append({"role": "system", "content": msg.content})
+                        oai_messages.append({
+                            "role": "system",
+                            "content": self._text_content_parts(msg.content),
+                        })
                     elif msg.type == "human":
-                        oai_messages.append({"role": "user", "content": msg.content})
+                        oai_messages.append({
+                            "role": "user",
+                            "content": self._text_content_parts(msg.content),
+                        })
                     elif msg.type == "ai":
-                        oai_messages.append({"role": "assistant", "content": msg.content})
+                        oai_messages.append({
+                            "role": "assistant",
+                            "content": self._text_content_parts(msg.content),
+                        })
                 text = self.agent.sync_chat_messages(
                     oai_messages, temperature=0.7, max_tokens=256
                 )

@@ -386,11 +386,49 @@ class SimulationEngine:
         return session
 
     @staticmethod
+    def _strip_outer_quotes(text: str) -> str:
+        """Remove a single matching quote pair around a whole response."""
+        text = text.strip()
+        quote_pairs = [
+            ('"', '"'),
+            ("'", "'"),
+            ("\u201c", "\u201d"),
+            ("\u2018", "\u2019"),
+        ]
+        for opening, closing in quote_pairs:
+            if text.startswith(opening) and text.endswith(closing) and len(text) >= 2:
+                return text[1:-1].strip()
+        return text
+
+    @staticmethod
+    def _strip_echoed_turn_prefix(text: str) -> str:
+        """Remove same-line echoed resident turns before the patient answer."""
+        text = re.sub(
+            r"^\s*(resident|doctor|user)\s*:\s*.*?\b(patient|assistant)\s*:\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"^\s*[\"'\u201c\u2018][^\n]{1,300}?[\"'\u201d\u2019]\s*(patient|assistant)\s*:\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        return re.sub(
+            r"^\s*[^:\n]{1,300}?\?\s*(patient|assistant)\s*:\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+
+    @staticmethod
     def _clean_response(text: str) -> str:
         """Strip MedGemma internal thinking/planning preamble from responses."""
         text = re.sub(r"^<unused\d+>\s*", "", text.strip())
         # Strip role prefixes the model sometimes echoes ("Patient: ", "Resident: ")
         text = re.sub(r"^(patient|resident|doctor)\s*:\s*", "", text, flags=re.IGNORECASE)
+        text = SimulationEngine._strip_echoed_turn_prefix(text)
 
         # Strip multi-turn conversation output (model continuing the dialogue)
         # Keep only the first patient response, before any "USER:" or "RESIDENT:" marker
@@ -400,11 +438,11 @@ class SimulationEngine:
 
         if "\n\n" not in text:
             if text.lower().startswith("thought"):
-                return re.sub(
+                return SimulationEngine._strip_outer_quotes(re.sub(
                     r"^thought\b.*", "", text,
                     flags=re.IGNORECASE | re.DOTALL,
-                ).strip()
-            return text
+                ).strip())
+            return SimulationEngine._strip_outer_quotes(text)
 
         first_para, rest = text.split("\n\n", 1)
         first_lower = first_para.lower()
@@ -422,9 +460,9 @@ class SimulationEngine:
         ]
 
         if any(preamble_signals) and rest.strip():
-            return rest.strip()
+            return SimulationEngine._strip_outer_quotes(rest)
 
-        return text
+        return SimulationEngine._strip_outer_quotes(text)
 
     @staticmethod
     def _keyword_patient_response(case: ClinicalCase, question: str) -> str:
@@ -434,7 +472,7 @@ class SimulationEngine:
             if key.lower() in question_lower or any(
                 word in question_lower for word in key.lower().split()
             ):
-                return response
+                return SimulationEngine._strip_outer_quotes(response)
         return (
             "I'm not sure what you mean. Could you ask me differently? "
             "I can tell you about my symptoms, medications, or medical history."

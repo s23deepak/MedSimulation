@@ -338,7 +338,7 @@ class VLLMService:
     @modal.method()
     async def chat(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict],
         max_tokens: int = 1024,
         temperature: float = 0.7,
         request_id: str | None = None,

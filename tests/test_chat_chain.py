@@ -85,3 +85,45 @@ def test_flatten_messages():
     assert "Resident: What hurts?" in flat
     assert "Patient: My chest hurts." in flat
     assert "Resident: Since when?" in flat
+
+
+def test_vllm_chat_path_uses_text_content_parts():
+    from langchain_core.messages import SystemMessage
+
+    class FakeVllmAgent:
+        def __init__(self):
+            self.messages = None
+
+        def sync_chat_messages(self, messages, temperature=0.7, max_tokens=512):
+            self.messages = messages
+            return "My chest hurts."
+
+    agent = FakeVllmAgent()
+    runnable = MedGemmaRunnable(agent)
+
+    result = runnable.invoke([
+        SystemMessage(content="You are a patient."),
+        HumanMessage(content="What hurts?"),
+        AIMessage(content="My stomach hurt earlier."),
+        HumanMessage(content="What about now?"),
+    ])
+
+    assert result.content == "My chest hurts."
+    assert agent.messages == [
+        {
+            "role": "system",
+            "content": [{"type": "text", "text": "You are a patient."}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What hurts?"}],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "My stomach hurt earlier."}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What about now?"}],
+        },
+    ]
