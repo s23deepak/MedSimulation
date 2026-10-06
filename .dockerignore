@@ -39,4 +39,4 @@ data/medsim.db
 
 # Documentation
 *.md
-!SIMULATION_PROJECT.md
+!README.md

@@ -1,19 +1,20 @@
 # MedSimulation 🩺
 
-An AI-powered clinical simulation engine designed for resident training, medical student education, and diagnostic competency assessment.
+An educational clinical reasoning practice workspace for medical students and residents. Generated feedback is not an official competency assessment or medical advice.
 
-MedSimulation provides a dynamic, simulated clinical environment where learners can interact with AI "patients," review multi-modal diagnostics (including live ECGs and full DICOM imaging stacks), and receive detailed, structured feedback on their clinical reasoning.
+Start with the [current workflow and setup guide](docs/WORKFLOW.md). The detailed sections below describe prototype capabilities and design history; the current review and access rules are in that guide.
 
-## 🚀 Key Features
+MedSimulation provides a dynamic AI clinical practice environment where learners can interact with AI patients, review multi-modal diagnostics (including live ECGs and full DICOM imaging stacks), and receive detailed, structured feedback on their clinical reasoning.
+
+## Key Features
 
 ### 🧠 Advanced AI Backend (vLLM)
 - **Local & Cloud Inference:** Run open-weights medical LLMs (e.g., `medgemma-4b-it` or `medgemma-27b-it`) locally via `vLLM` on consumer GPUs, or connect to cloud API endpoints seamlessly.
-- **Simulated Mode:** Instantly boot the server without an AI backend using deterministic, rule-based fallback scoring.
 - **Patient Persona Engine:** AI dynamically impersonates the patient during history taking, delivering realistic dialogue and withholding key information until asked the right questions.
-- **Automated Grading:** A built-in "senior clinician" agent scores the resident out of 100 based on 5 domains: History, Physical Exam, Investigations, Diagnosis, and Management.
+- **Practice Feedback:** Human-reviewed cases use a versioned five-domain rubric for traceable numeric feedback. Unreviewed cases remain available for unscored practice.
 
 ### 📚 Dynamic Case Pipeline
-Never run out of cases to practice. MedSimulation features a robust ingestion pipeline backing onto a SQLite database with an administrative review queue:
+Generated and imported cases are stored as pending until a future third-party-auth-protected review workflow approves them for numeric practice scores. Local development uses SQLite; hosted deployments require Postgres.
 - **PubMed Integration:** Fetches and parses clinical case xml from NCBI databases.
 - **Wiley Clinical Case Reports:** Imports real-world open-access case reports.
 - **EndlessMedical API:** Integrates programmatic diagnostic challenges.
@@ -21,7 +22,7 @@ Never run out of cases to practice. MedSimulation features a robust ingestion pi
 - **Free-text AI Generation:** Generates bespoke clinical cases from a single symptom or scenario prompt.
 
 ### 🎙️ Patient Voice
-- **Conversational Text-to-Speech**: Integrated OpenAI TTS-1 automatically voices the patient's dialogue out loud during history taking, adapting the voice (`alloy` or `nova`) based on the patient's demographics.
+- **Browser-native voice conversation**: Residents can dictate history questions with the browser microphone, and patient replies can be spoken aloud with browser text-to-speech. This keeps the default voice workflow free to test without paid API calls.
 
 ### 🧠 Adaptive Learning & Engagement
 - **Contextual Bandits**: A lightweight Thompson Sampling engine (`bandits.py`) runs natively in the backend. 
@@ -113,36 +114,102 @@ sequenceDiagram
 
 ### Installation
 
-1. Clone the repository and install dependencies using `uv`:
+1. Clone the repository and install core dependencies using `uv`:
    ```bash
-   # Install core dependencies
    uv sync
-   
-   # Optional: If you intend to run vLLM locally on a GPU
-   uv sync --extra gpu
    ```
 
-   This installs both `vllm` and `bitsandbytes`, which the default launcher uses for quantized local inference.
-
-2. Copy the config template and edit `.env`:
+2. Create local app configuration:
    ```bash
    cp .env.example .env
-   # Update VLLM_MODE to 'simulated', 'local', or 'cloud'
    ```
 
-3. Run the application:
+   For local LLM testing, `.env` should include:
+
+   ```env
+   VLLM_MODE=local
+   VLLM_LOCAL_URL=http://localhost:8001/v1
+   VLLM_MODEL=google/medgemma-4b-it
+   ```
+
+   Do not commit `.env`. If you need Hugging Face access for gated MedGemma weights, prefer:
+
    ```bash
-   # If running locally with an LLM, start the vLLM server first:
-   VLLM_MAX_MODEL_LEN=8192 bash scripts/start_vllm.sh
-
-   # Optional: disable bitsandbytes quantization on higher-VRAM GPUs
-   VLLM_QUANTIZATION=none bash scripts/start_vllm.sh
-   
-   # Start the FastAPI engine:
-   uv run python main.py
+   huggingface-cli login
    ```
 
-4. Navigate your browser to `http://localhost:8000`.
+   This stores your token in your user Hugging Face cache instead of the project repo. You can also export `HF_TOKEN` in your shell before starting vLLM.
+
+3. Create or use a local LLM environment. The project normally uses `.venv`; if that environment is not suitable for GPU/vLLM work, create a dedicated `.llm-venv`.
+
+   For the tested RTX 5060 Laptop GPU / WSL setup, use the locked vLLM line that still supports `bitsandbytes` quantization:
+
+   ```bash
+   uv venv --python 3.12 .llm-venv
+   uv pip install --python .llm-venv/bin/python -e .
+   uv pip install --python .llm-venv/bin/python \
+     'vllm==0.16.0' 'bitsandbytes==0.49.2' 'ziglang==0.16.0' \
+     'transformers>=4.40.0' 'accelerate>=0.27.0' 'sentencepiece>=0.2.0'
+   ```
+
+   vLLM/Triton needs a C compiler for runtime CUDA kernels. If `gcc` or `clang` is not installed, create a small Zig compiler wrapper inside the venv:
+
+   ```bash
+   cat > .llm-venv/bin/zig-cc <<'EOF'
+   #!/usr/bin/env bash
+   exec "$(dirname "$0")/../lib/python3.12/site-packages/ziglang/zig" cc "$@"
+   EOF
+   chmod +x .llm-venv/bin/zig-cc
+   ```
+
+4. Start the local LLM server in terminal 1:
+
+   ```bash
+   cd ~/projects/MedSimulation
+   source .llm-venv/bin/activate
+
+   CC="$PWD/.llm-venv/bin/zig-cc" vllm serve google/medgemma-4b-it \
+     --host 127.0.0.1 \
+     --port 8001 \
+     --dtype bfloat16 \
+     --max-model-len 1024 \
+     --gpu-memory-utilization 0.85 \
+     --trust-remote-code \
+     --enforce-eager \
+     --max-num-seqs 1 \
+     --disable-log-stats \
+     --limit-mm-per-prompt '{"image":0}' \
+     --allow-deprecated-quantization \
+     --quantization bitsandbytes \
+     --load-format bitsandbytes
+   ```
+
+   This starts MedGemma in text-only mode with 1024 tokens of context. The unquantized model does not fit reliably on an 8 GB GPU in this environment.
+
+5. Start the FastAPI app in terminal 2:
+
+   ```bash
+   cd ~/projects/MedSimulation
+   source .llm-venv/bin/activate
+
+   set -a
+   source .env
+   set +a
+
+   python main.py --host 127.0.0.1 --port 8000
+   ```
+
+6. Verify both layers:
+
+   ```bash
+   curl http://127.0.0.1:8001/v1/models
+   curl http://127.0.0.1:8000/api/health
+   curl http://127.0.0.1:8000/api/model/status
+   ```
+
+7. Navigate your browser to `http://127.0.0.1:8000`.
+
+If the MedGemma model download fails with a gated-repository error, confirm that your Hugging Face account has accepted access to `google/medgemma-4b-it` and that `huggingface-cli login` was run from the same user account.
 
 ---
 
@@ -218,8 +285,8 @@ Edit `.env.modal` to customize:
 VLLM_MODEL=google/medgemma-4b-it
 
 # GPU tuning
-VLLM_GPU_MEMORY=0.7        # Higher = more model, less cache
-VLLM_MAX_MODEL_LEN=4096    # Context window size
+VLLM_GPU_UTIL=0.85         # Higher = more GPU memory reserved by vLLM
+VLLM_MAX_MODEL_LEN=1024    # Tested local 8 GB context window
 
 # Use cloud LLM instead of local GPU
 VLLM_MODE=cloud
@@ -357,11 +424,11 @@ MedSimulation/
 
 ### UX & Clinical Realism
 - **Lab/Imaging results for newly ordered tests**: When a resident orders a test not pre-loaded in the case (e.g. selecting a CBC mid-simulation), the UI currently returns "no result available." The system should dynamically generate plausible, case-consistent results for any ordered test rather than surfacing a dead-end.
-- **Speech-to-text input for doctors**: Typing is not natural for clinicians during a simulated encounter. Integrate Whisper (local) or OpenAI Whisper API so residents can speak their questions/orders and have them transcribed into the input field. This is especially important for hands-free workflow and realism.
-- ~~**Text-to-speech for patient responses**~~: Implemented — OpenAI TTS-1 voices patient dialogue during history taking with gender-appropriate voices (`alloy` for male, `nova` for female).
+- ~~**Speech-to-text input for doctors**~~: Implemented with browser-native speech recognition, so residents can speak history questions without a paid transcription API.
+- ~~**Text-to-speech for patient responses**~~: Implemented with browser-native speech synthesis, so patient replies can be heard without a paid TTS API.
 
 ### Scoring & Quality Metrics
-- **Patient satisfaction score**: Track and penalise repetitive or unnecessary questions during history taking. Frequent redundant queries lower the simulated patient's satisfaction score — surfaced in the debrief as a proxy for bedside manner and efficiency. This score directly affects the hospital's simulated quality metrics.
+- **Patient satisfaction score**: Track and penalise repetitive or unnecessary questions during history taking. Frequent redundant queries lower the AI patient's satisfaction score — surfaced in the debrief as a proxy for bedside manner and efficiency. This score directly affects the hospital's training quality metrics.
 - **Hospital-specific satisfaction metrics**: At scale, different institutions have different quality frameworks (e.g. HCAHPS, CQC, internal KPIs). The scoring engine should support per-hospital configuration that maps satisfaction dimensions to institution-specific weights. Store these profiles in the database so results are comparable within, not just across, institutions.
 
 ### Documentation & Review
@@ -369,9 +436,9 @@ MedSimulation/
 - ~~**Clinical Feedback & Coaching Points empty**~~: Fixed — rule-based debrief now generates fallback content for all sections when AI feedback is unavailable or too short.
 
 ### Infrastructure (Context Window)
-- **Context sliding for patient conversation**: medgemma-4b-it has a 4096-token context window. Long simulations (>25 exchanges) will eventually hit the limit. Implement a sliding-window trim in `chat_chain.py` — keep system prompt + last N turn pairs, dropping older history at inference time while preserving it in memory for scoring/debrief.
-- **vLLM context length**: Default `VLLM_MAX_MODEL_LEN=4096`. For better case generation quality, restart with `VLLM_MAX_MODEL_LEN=8192 bash scripts/start_vllm.sh`.
-- **Session Checkpoint Agent**: Background agent that periodically persists in-progress sessions to SQLite. `save_session()` already exists in `database.py` but is only called on session completion — a server restart currently drops all active sessions.
+- **Context sliding for patient conversation**: the tested local 8 GB setup runs `medgemma-4b-it` at a 1024-token vLLM context window. Long simulations will eventually hit the limit. Implement a sliding-window trim in `chat_chain.py` — keep system prompt + last N turn pairs, dropping older history at inference time while preserving it in memory for scoring/debrief.
+- **vLLM context length**: The local tested command uses `--max-model-len 1024`. Higher-VRAM or cloud deployments can raise this, but the unquantized model does not fit reliably on the tested 8 GB GPU.
+- **Session checkpoints**: Active sessions are saved after each interaction and restored from the database after a worker restart.
 
 ### Case Generation Quality
 - ~~**Physical exam findings generic**~~: Fixed — prompt now requires specific findings (e.g., "Inspection: moderate swelling, Palpation: MCL tenderness, ROM: limited flexion")

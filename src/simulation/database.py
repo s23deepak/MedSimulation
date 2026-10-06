@@ -1,454 +1,214 @@
-"""
-Database layer for persisting cases and sessions.
-
-Uses SQLite for development / local mode.
-Can be swapped to PostgreSQL for production via DATABASE_URL env var.
-
-Tables
-------
-- cases: all simulation cases (static + dynamic)
-- sessions: simulation session history + scores
-"""
-
-from __future__ import annotations
-
+"""Versioned case review, session persistence and audit repository."""
 import json
-import logging
 import os
-import sqlite3
+import uuid
 from contextlib import contextmanager
+from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-
-from .cases import ClinicalCase, CASES, _register
 from .bandits import BanditState, ThompsonSamplingBandit
+from .cases import CASES, ClinicalCase, _register
+from .migrations import migrate
+from .safety import check_case
+from .storage import Connection, engine_for
 
-logger = logging.getLogger(__name__)
-
-# ── Database path ─────────────────────────────────────────────────────────────
-
-_DB_PATH = os.getenv(
-    "DATABASE_PATH",
-    str(Path(__file__).resolve().parent.parent.parent / "data" / "medsim.db"),
-)
-
-_SCHEMA = """\
+_DB_PATH = os.getenv("DATABASE_PATH", str(Path(__file__).resolve().parents[2] / "data/medsim.db"))
+_initialized = set()
+_SCHEMA = """
 CREATE TABLE IF NOT EXISTS cases (
-    case_id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    specialty TEXT DEFAULT '',
-    difficulty TEXT DEFAULT 'intermediate',
-    source TEXT DEFAULT 'static',
-    source_ref TEXT DEFAULT '',
-    case_data JSON NOT NULL,
-    status TEXT DEFAULT 'approved',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ case_id TEXT PRIMARY KEY, title TEXT NOT NULL, specialty TEXT DEFAULT '',
+ difficulty TEXT DEFAULT 'intermediate', source TEXT DEFAULT 'static', source_ref TEXT DEFAULT '',
+ case_data TEXT NOT NULL, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE TABLE IF NOT EXISTS sessions (
-    session_id TEXT PRIMARY KEY,
-    resident_name TEXT DEFAULT '',
-    case_id TEXT,
-    session_data JSON,  -- Full session state (history, exam, investigations, etc.)
-    score_data JSON,
-    debrief_data JSON,
-    status TEXT DEFAULT 'active',
-    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (case_id) REFERENCES cases(case_id)
+ session_id TEXT PRIMARY KEY, resident_name TEXT DEFAULT '', case_id TEXT REFERENCES cases(case_id),
+ session_data TEXT, score_data TEXT, debrief_data TEXT, status TEXT DEFAULT 'active',
+ started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX IF NOT EXISTS idx_cases_source ON cases(source);
+CREATE TABLE IF NOT EXISTS bandit_state (arm_id TEXT PRIMARY KEY, alpha INTEGER DEFAULT 1, beta INTEGER DEFAULT 1);
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
-CREATE INDEX IF NOT EXISTS idx_cases_specialty ON cases(specialty);
-CREATE INDEX IF NOT EXISTS idx_sessions_case ON sessions(case_id);
-
-CREATE TABLE IF NOT EXISTS bandit_state (
-    arm_id TEXT PRIMARY KEY,
-    alpha INTEGER DEFAULT 1,
-    beta INTEGER DEFAULT 1
-);
 """
 
+def now():
+    return datetime.now(timezone.utc).isoformat()
 
-# ── Connection management ─────────────────────────────────────────────────────
+def decode(value):
+    return json.loads(value) if isinstance(value, str) else value
 
-def _ensure_db() -> None:
-    """Create database directory and tables if they don't exist."""
-    db_path = Path(_DB_PATH)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    with _connect() as conn:
-        conn.executescript(_SCHEMA)
-        # Run migrations for schema updates
-        _migrate_schema(conn)
-    logger.info("Database initialized at %s", _DB_PATH)
-
-
-def _migrate_schema(conn) -> None:
-    """Run schema migrations for existing databases."""
-    # Check if sessions table has the new columns
-    cursor = conn.execute("PRAGMA table_info(sessions)")
-    columns = {row[1] for row in cursor.fetchall()}
-
-    # Add session_data column if missing
-    if "session_data" not in columns:
-        logger.info("Adding session_data column to sessions table")
-        conn.execute("ALTER TABLE sessions ADD COLUMN session_data JSON")
-
-    # Add updated_at column if missing
-    if "updated_at" not in columns:
-        logger.info("Adding updated_at column to sessions table")
-        conn.execute("ALTER TABLE sessions ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-
+def _ensure_db():
+    key = (os.getenv("DATABASE_URL"), _DB_PATH)
+    if key in _initialized:
+        return
+    if not os.getenv("DATABASE_URL"):
+        Path(_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    migrate(engine_for(_DB_PATH), _SCHEMA)
+    _initialized.add(key)
 
 @contextmanager
 def _connect():
-    """Context manager for SQLite connections."""
-    conn = sqlite3.connect(_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    with engine_for(_DB_PATH).begin() as conn:
+        yield Connection(conn)
 
+def audit(actor, event_type, subject_id, payload, conn=None):
+    args = (uuid.uuid4().hex, actor, event_type, subject_id, json.dumps(payload), now())
+    sql = "INSERT INTO audit_events VALUES (?, ?, ?, ?, ?, ?)"
+    if conn is not None:
+        conn.execute(sql, args)
+    else:
+        with _connect() as connection:
+            connection.execute(sql, args)
 
-# ── Case operations ───────────────────────────────────────────────────────────
-
-def save_case(
-    case_data: dict,
-    source: str = "ai_generated",
-    source_ref: str = "",
-    status: str = "approved",
-) -> str:
-    """
-    Save a case to the database.
-
-    Parameters
-    ----------
-    case_data : dict
-        Full ClinicalCase-compatible dictionary
-    source : str
-        Origin: 'static', 'pubmed', 'wiley', 'endless_medical', 'ai_generated'
-    source_ref : str
-        Reference identifier (PMID, DOI, disease name)
-    status : str
-        'approved' (auto for local), 'pending' (needs review for cloud)
-
-    Returns
-    -------
-    str
-        The case_id of the saved case.
-    """
-    _ensure_db()
-    case_id = case_data.get("case_id", "")
-    if not case_id:
-        raise ValueError("case_data must contain case_id")
-
+def case_record(case_id):
     with _connect() as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO cases
-                (case_id, title, specialty, difficulty, source, source_ref, case_data, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                case_id,
-                case_data.get("title", ""),
-                case_data.get("specialty", ""),
-                case_data.get("difficulty", "intermediate"),
-                source,
-                source_ref,
-                json.dumps(case_data),
-                status,
-            ),
-        )
+        row = conn.execute("SELECT * FROM cases WHERE case_id = ?", (case_id,)).fetchone()
+    if not row:
+        return None
+    data = decode(row["case_data"])
+    for key in ("source", "source_ref", "status", "version", "reviewer", "approved_at", "review_notes"):
+        data[key] = row[key]
+    return data
 
-    logger.info("Saved case %s (source=%s, status=%s)", case_id, source, status)
-
-    # If approved, also register in the in-memory case registry
-    if status == "approved":
-        # Inject provenance so ClinicalCase.source/source_ref are populated
-        case_data["source"] = source
-        case_data["source_ref"] = source_ref
-        _register_case_from_dict(case_data)
-
+def save_case(case_data, source="ai_generated", source_ref="", status="pending", expected_version=None):
+    # Approval only happens in the review transaction, never through import metadata.
+    check_case(case_data)
+    _ensure_db()
+    case_id = case_data["case_id"]
+    clean = {k: v for k, v in case_data.items() if k in ClinicalCase.__dataclass_fields__}
+    ClinicalCase(**clean)
+    with _connect() as conn:
+        sql = """INSERT INTO cases (case_id,title,specialty,difficulty,source,source_ref,case_data,status)
+            VALUES (?,?,?,?,?,?,?,'pending') ON CONFLICT(case_id) DO UPDATE SET
+            title=excluded.title,specialty=excluded.specialty,difficulty=excluded.difficulty,
+            source=excluded.source,source_ref=excluded.source_ref,case_data=excluded.case_data,
+            status='pending',version=cases.version+1,reviewer=NULL,approved_at=NULL,review_notes=NULL"""
+        if expected_version is not None:
+            sql += " WHERE cases.version=?"
+        args = (case_id, clean["title"], clean["specialty"], clean["difficulty"], source, source_ref, json.dumps(clean))
+        result = conn.execute(sql, args + ((expected_version,) if expected_version is not None else ()))
+        if not result.rowcount:
+            raise ValueError("Case changed during edit")
+        audit("import", "case_saved", case_id, {"source": source}, conn)
+    register_case_from_db(case_id)
     return case_id
 
-
-def load_dynamic_cases(status: str = "approved") -> list[dict]:
-    """Load all cases from the database with the given status."""
-    _ensure_db()
+def load_dynamic_cases(status="approved"):
     with _connect() as conn:
-        rows = conn.execute(
-            "SELECT case_data, source, source_ref, status FROM cases WHERE status = ?",
-            (status,),
-        ).fetchall()
+        ids = conn.execute("SELECT case_id FROM cases WHERE status=?", (status,)).fetchall()
+    return [case_record(row["case_id"]) for row in ids]
 
-    cases = []
-    for row in rows:
-        data = json.loads(row["case_data"])
-        data["_source"] = row["source"]
-        data["_source_ref"] = row["source_ref"]
-        data["_status"] = row["status"]
-        # Also set without underscore so ClinicalCase.source/source_ref fields are populated
-        data["source"] = row["source"]
-        data["source_ref"] = row["source_ref"]
-        cases.append(data)
+def get_pending_cases():
+    return load_dynamic_cases("pending")
 
-    return cases
-
-
-def get_pending_cases() -> list[dict]:
-    """Get cases pending admin review."""
-    return load_dynamic_cases(status="pending")
-
-
-def approve_case(case_id: str) -> bool:
-    """Approve a pending case for use in simulations."""
-    _ensure_db()
+def approve_case(case_id, reviewer, version, notes, rubric):
+    from .rubrics import validate_rubric
+    validate_rubric(rubric)
+    data = case_record(case_id)
+    if not data or data["status"] != "pending" or data["version"] != version:
+        return False
+    check_case(data)
+    weights = data.get("score_weights", {})
+    if set(weights) != {"history", "exam", "investigations", "diagnosis", "management"} or any(not isinstance(value, int) or value <= 0 for value in weights.values()) or sum(weights.values()) != 100:
+        raise ValueError("Scoring weights must provide five positive domains totaling 100")
+    if "pending" in data["correct_diagnosis"].lower() or "TBD" in data.get("acceptable_diagnoses", []):
+        raise ValueError("Complete the diagnosis and rubric before approval")
+    data.update(status="approved", reviewer=reviewer, approved_at=now(), review_notes=notes, rubric=rubric)
     with _connect() as conn:
-        cursor = conn.execute(
-            "UPDATE cases SET status = 'approved' WHERE case_id = ? AND status = 'pending'",
-            (case_id,),
-        )
-        if cursor.rowcount == 0:
+        result = conn.execute("""UPDATE cases SET status='approved', reviewer=?, approved_at=?, review_notes=?, case_data=?
+            WHERE case_id=? AND version=? AND status='pending'""",
+            (reviewer, data["approved_at"], notes, json.dumps(data), case_id, version))
+        if not result.rowcount:
             return False
-
-        # Load into memory
-        row = conn.execute(
-            "SELECT case_data, source, source_ref FROM cases WHERE case_id = ?", (case_id,)
-        ).fetchone()
-        if row:
-            data = json.loads(row["case_data"])
-            data["source"] = row["source"]
-            data["source_ref"] = row["source_ref"]
-            _register_case_from_dict(data)
-
-    logger.info("Approved case %s", case_id)
+        conn.execute("INSERT INTO case_versions VALUES (?,?,?)", (case_id, version, json.dumps(data)))
+        audit(reviewer, "case_approved", case_id, {"version": version, "rubric": rubric, "notes": notes}, conn)
+    _register_case_from_dict(data)
     return True
 
+def reject_case(case_id, reviewer, version, notes):
+    with _connect() as conn:
+        result = conn.execute("UPDATE cases SET status='rejected',reviewer=?,review_notes=? WHERE case_id=? AND version=? AND status='pending'", (reviewer, notes, case_id, version))
+        if result.rowcount:
+            audit(reviewer, "case_rejected", case_id, {"version": version, "notes": notes}, conn)
+    CASES.pop(case_id, None)
+    return bool(result.rowcount)
 
-def reject_case(case_id: str) -> bool:
-    """Reject a pending case."""
+def register_case_from_db(case_id):
+    data = case_record(case_id)
+    if not data or data["status"] == "rejected":
+        return False
+    _register_case_from_dict(data)
+    return True
+
+def list_db_cases(source=None, status=None):
+    with _connect() as conn:
+        rows = conn.execute("SELECT case_id,title,specialty,difficulty,source,source_ref,status,version,reviewer,approved_at FROM cases").fetchall()
+    return [dict(row) for row in rows if (not source or row["source"] == source) and (not status or row["status"] == status)]
+
+def save_session(session_data, actor=None):
+    session_id = session_data["session_id"]
+    with _connect() as conn:
+        conn.execute("""INSERT INTO sessions (session_id,resident_name,case_id,session_data,score_data,debrief_data,status,started_at,completed_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET
+            session_data=excluded.session_data,score_data=excluded.score_data,debrief_data=excluded.debrief_data,
+            status=excluded.status,completed_at=excluded.completed_at,updated_at=excluded.updated_at""",
+            (session_id, session_data["resident_name"], session_data["case_id"], json.dumps(session_data),
+             json.dumps(session_data.get("score")), json.dumps(session_data.get("debrief")), session_data["status"],
+             session_data["started_at"], session_data.get("completed_at") or None, now()))
+        if session_data.get("owner_id"):
+            conn.execute("INSERT INTO session_owners VALUES (?,?) ON CONFLICT(session_id) DO NOTHING", (session_id, session_data["owner_id"]))
+        if actor:
+            audit(actor, "assessment_submitted", session_id, {
+                key: session_data.get(key) for key in ("diagnosis_submitted", "management_submitted", "score", "debrief", "case_snapshot")
+            }, conn)
+
+def load_session(session_id):
+    with _connect() as conn:
+        row = conn.execute("SELECT session_data FROM sessions WHERE session_id=?", (session_id,)).fetchone()
+    return decode(row["session_data"]) if row else None
+
+def get_session_status(session_id):
+    return load_session(session_id)
+
+def load_bandit_state():
+    with _connect() as conn:
+        rows = conn.execute("SELECT arm_id,alpha,beta FROM bandit_state").fetchall()
+    return {r["arm_id"]: BanditState(**dict(r)) for r in rows}
+
+def update_bandit_state(arm_id, success):
+    with _connect() as conn:
+        conn.execute("INSERT INTO bandit_state VALUES (?,1,1) ON CONFLICT(arm_id) DO NOTHING", (arm_id,))
+        field = "alpha" if success else "beta"
+        conn.execute(f"UPDATE bandit_state SET {field}={field}+1 WHERE arm_id=?", (arm_id,))
+
+def get_recommended_cases(limit=12):
+    # Return presentation metadata only. Answer keys belong to the review API.
+    records = [r for r in list_db_cases() if r["status"] != "rejected" and not (r["source"] == "dicom" and r["status"] != "approved")]
+    groups = {}
+    for record in records:
+        arm = f"{record['specialty']}_{record['difficulty']}".lower().replace(" ", "_")
+        groups.setdefault(arm, []).append(record)
+    ranked = ThompsonSamplingBandit(states=load_bandit_state()).sample_arms(list(groups), k=len(groups))
+    ranked_records = []
+    while any(groups.values()) and len(ranked_records) < limit:
+        for arm in ranked:
+            if groups[arm] and len(ranked_records) < limit:
+                ranked_records.append(groups[arm].pop(0))
+    result = []
+    for record in ranked_records:
+        data = case_record(record["case_id"])
+        record["learning_objectives"] = data.get("learning_objectives", [])
+        record["_arm_id"] = f"{record['specialty']}_{record['difficulty']}".lower().replace(" ", "_")
+        result.append(record)
+    return result
+
+def _register_case_from_dict(data):
+    _register(ClinicalCase(**{k: v for k, v in data.items() if k in ClinicalCase.__dataclass_fields__}))
+
+def init_db():
     _ensure_db()
     with _connect() as conn:
-        cursor = conn.execute(
-            "UPDATE cases SET status = 'rejected' WHERE case_id = ? AND status = 'pending'",
-            (case_id,),
-        )
-    return cursor.rowcount > 0
-
-
-def list_db_cases(
-    source: str | None = None,
-    status: str | None = None,
-) -> list[dict]:
-    """List cases with optional filters."""
-    _ensure_db()
-    query = "SELECT case_id, title, specialty, difficulty, source, source_ref, status, created_at FROM cases WHERE 1=1"
-    params: list = []
-
-    if source:
-        query += " AND source = ?"
-        params.append(source)
-    if status:
-        query += " AND status = ?"
-        params.append(status)
-
-    query += " ORDER BY created_at DESC"
-
-    with _connect() as conn:
-        rows = conn.execute(query, params).fetchall()
-
-    return [dict(row) for row in rows]
-
-
-# ── Session persistence ──────────────────────────────────────────────────────
-
-def save_session(session_data: dict) -> None:
-    """
-    Save or update a simulation session in the database.
-
-    Stores the full session state in session_data JSON column for complete
-    persistence across container restarts.
-    """
-    _ensure_db()
-    import datetime
-    now = datetime.datetime.now().isoformat()
-
-    with _connect() as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO sessions
-                (session_id, resident_name, case_id, session_data, score_data, debrief_data,
-                 status, started_at, completed_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                session_data.get("session_id", ""),
-                session_data.get("resident_name", ""),
-                session_data.get("case_id", ""),
-                json.dumps(session_data),  # Full session state
-                json.dumps(session_data.get("score")) if session_data.get("score") else None,
-                json.dumps(session_data.get("debrief")) if session_data.get("debrief") else None,
-                session_data.get("status", "active"),
-                session_data.get("started_at", ""),
-                session_data.get("completed_at", ""),
-                now,
-            ),
-        )
-
-
-def load_session(session_id: str) -> dict | None:
-    """
-    Load a simulation session from the database by session_id.
-
-    Returns the full session_data dict if found, None otherwise.
-    """
-    _ensure_db()
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT session_data FROM sessions WHERE session_id = ?",
-            (session_id,),
-        ).fetchone()
-
-    if row is None:
-        return None
-
-    return json.loads(row["session_data"])
-
-
-def get_session_status(session_id: str) -> dict | None:
-    """
-    Get basic session status without full data.
-
-    Used for polling endpoints to check if AI feedback is ready.
-    """
-    _ensure_db()
-    with _connect() as conn:
-        row = conn.execute(
-            """
-            SELECT session_id, status, score_data, debrief_data, updated_at
-            FROM sessions WHERE session_id = ?
-            """,
-            (session_id,),
-        ).fetchone()
-
-    if row is None:
-        return None
-
-    return {
-        "session_id": row["session_id"],
-        "status": row["status"],
-        "score": json.loads(row["score_data"]) if row["score_data"] else None,
-        "debrief": json.loads(row["debrief_data"]) if row["debrief_data"] else None,
-        "updated_at": row["updated_at"],
-    }
-
-# ── Bandit persistence ────────────────────────────────────────────────────────
-
-def load_bandit_state() -> dict[str, BanditState]:
-    """Load the current Thompson Sampling alpha/beta counts for all arms."""
-    _ensure_db()
-    states = {}
-    with _connect() as conn:
-        rows = conn.execute("SELECT arm_id, alpha, beta FROM bandit_state").fetchall()
-        for row in rows:
-            states[row["arm_id"]] = BanditState(
-                arm_id=row["arm_id"], alpha=row["alpha"], beta=row["beta"]
-            )
-    return states
-
-def update_bandit_state(arm_id: str, success: bool) -> None:
-    """Update an arm's alpha (success) or beta (failure) count."""
-    _ensure_db()
-    with _connect() as conn:
-        # First ensure the row exists
-        conn.execute(
-            "INSERT OR IGNORE INTO bandit_state (arm_id, alpha, beta) VALUES (?, 1, 1)",
-            (arm_id,)
-        )
-        if success:
-            conn.execute("UPDATE bandit_state SET alpha = alpha + 1 WHERE arm_id = ?", (arm_id,))
-        else:
-            conn.execute("UPDATE bandit_state SET beta = beta + 1 WHERE arm_id = ?", (arm_id,))
-
-def get_recommended_cases(limit: int = 6) -> list[dict]:
-    """
-    Use the ThompsonSamplingBandit to rank cases based on historical
-    engagement clicks, balancing exploration and exploitation.
-    """
-    bandit_state_dict = load_bandit_state()
-    bandit = ThompsonSamplingBandit(states=bandit_state_dict)
-    
-    # 1. Fetch all available cases
-    all_cases = []
-    _ensure_db()
-    with _connect() as conn:
-        rows = conn.execute(
-            "SELECT case_id, title, specialty, difficulty, source, case_data FROM cases WHERE status = 'approved'"
-        ).fetchall()
-        
-    for row in rows:
-        data = json.loads(row["case_data"])
-        data["_arm_id"] = f"{row['specialty']}_{row['difficulty']}".lower().replace(" ", "_").strip()
-        data["_source"] = row["source"]
-        all_cases.append(data)
-        
-    # Group cases by arm_id
-    cases_by_arm: dict[str, list[dict]] = {}
-    for case in all_cases:
-        arm = case.get("_arm_id", "unknown_intermediate")
-        cases_by_arm.setdefault(arm, []).append(case)
-        
-    available_arms = list(cases_by_arm.keys())
-    
-    # 2. Sample from the bandit to get the ranked arms
-    ranked_arms = bandit.sample_arms(available_arms, k=len(available_arms))
-    
-    # 3. Build the final recommended list
-    recommended = []
-    # Interleave cases from the top sampled arms to provide variety
-    # but strictly preferring the top bandit choices.
-    while len(recommended) < limit and any(cases_by_arm.values()):
-        for arm in ranked_arms:
-            if cases_by_arm[arm] and len(recommended) < limit:
-                # Pop a random case from this arm so we don't always show the exact same case
-                import random
-                idx = random.randrange(len(cases_by_arm[arm]))
-                recommended.append(cases_by_arm[arm].pop(idx))
-                
-    return recommended
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _register_case_from_dict(data: dict) -> None:
-    """Register a case dict into the in-memory CASES registry."""
-    try:
-        # Remove internal metadata keys
-        clean = {k: v for k, v in data.items() if not k.startswith("_")}
-        case = ClinicalCase(**clean)
-        _register(case)
-        logger.debug("Registered dynamic case %s in memory", case.case_id)
-    except Exception as e:
-        logger.warning("Could not register case %s from DB: %s", data.get("case_id"), e)
-
-
-def init_db() -> None:
-    """Initialize the database (called during app startup)."""
-    _ensure_db()
-
-    # Load all approved dynamic cases into memory
-    approved = load_dynamic_cases(status="approved")
-    for case_data in approved:
-        _register_case_from_dict(case_data)
-
-    if approved:
-        logger.info("Loaded %d dynamic cases from database", len(approved))
+        for case in list(CASES.values()):
+            conn.execute("""INSERT INTO cases (case_id,title,specialty,difficulty,source,source_ref,case_data,status)
+                VALUES (?,?,?,?,?,?,?,'pending') ON CONFLICT(case_id) DO NOTHING""",
+                (case.case_id, case.title, case.specialty, case.difficulty, case.source or "static", case.source_ref, json.dumps(asdict(case))))
+    for record in list_db_cases():
+        register_case_from_db(record["case_id"])

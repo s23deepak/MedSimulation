@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Case Review | MedSimulation</title><link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/workflow.css"></head>
+<body>
+<header class="app-header"><div class="header-inner"><a class="logo" href="/simulation">MedSimulation</a><a href="/simulation">Practice workspace</a></div></header>
+<main class="review-layout">
+  <aside><h1>Case Review</h1><p id="reviewStatus" role="status"></p><button id="refreshQueue" type="button">Refresh queue</button><nav id="reviewQueue" class="review-queue" aria-label="Pending cases"></nav></aside>
+  <section id="reviewDetail" hidden>
+    <h2 id="reviewTitle"></h2><p id="reviewProvenance"></p>
+    <form id="reviewForm" class="review-form">
+      <details><summary>Case content</summary><div id="caseFields"></div><button type="button" id="saveCase">Save revision</button></details>
+      <h3>Scoring rubric</h3><label>Rubric version<input id="rubricVersion" required></label>
+      <div id="rubricItems"></div><button id="addRubricItem" type="button">Add rubric item</button>
+      <label>Penalty per unlisted investigation<input id="unlistedPenalty" type="number" min="0" max="5"></label>
+      <h3>Action prerequisites</h3><div id="orderRules"></div><button id="addOrderRule" type="button">Add prerequisite</button>
+      <label>Review notes<textarea name="notes" id="reviewNotes" minlength="10" required></textarea></label>
+      <label><input id="reviewConfirmed" type="checkbox"> I have clinically reviewed this case and rubric, verified source material, and confirmed that any imaging is suitable for educational sharing.</label>
+      <div class="review-actions"><button type="submit">Approve version</button><button type="button" id="rejectCase">Reject version</button></div>
+      <p id="reviewError" role="alert"></p>
+    </form>
+    <details><summary>Review audit trail</summary><div id="reviewAudit"></div></details>
+  </section>
+</main>
+<script src="/static/js/api.js" defer></script><script src="/static/js/review.js" defer></script>
+</body></html>

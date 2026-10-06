@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Clinical Simulation Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary": "#ffffff",
+                      "secondary-fixed-dim": "#b9c7e0",
+                      "on-background": "#181c1c",
+                      "surface-container-high": "#e6e9e7",
+                      "surface-dim": "#d7dbd9",
+                      "error": "#ba1a1a",
+                      "on-surface-variant": "#3e4947",
+                      "outline-variant": "#bec9c6",
+                      "surface-container": "#eceef0",
+                      "surface-bright": "#f7faf8",
+                      "on-secondary-container": "#556379",
+                      "primary": "#004e47",
+                      "inverse-surface": "#2d3130",
+                      "on-primary-fixed-variant": "#005049",
+                      "on-tertiary-container": "#ffc9b7",
+                      "on-tertiary": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "tertiary-fixed-dim": "#ffb59a",
+                      "inverse-on-surface": "#eef1ef",
+                      "surface-variant": "#e0e3e1",
+                      "surface": "#f7faf8",
+                      "on-primary": "#ffffff",
+                      "surface-tint": "#066a61",
+                      "secondary-fixed": "#d5e3fc",
+                      "secondary": "#515f74",
+                      "inverse-primary": "#85d5c9",
+                      "on-error": "#ffffff",
+                      "clinical-success": "#059669",
+                      "tertiary-fixed": "#ffdbcf",
+                      "on-error-container": "#93000a",
+                      "on-secondary-fixed-variant": "#3a485c",
+                      "on-primary-container": "#93e4d8",
+                      "background": "#f7faf8",
+                      "surface-container-highest": "#e0e3e1",
+                      "on-tertiary-fixed": "#380d00",
+                      "clinical-pending": "#D97706",
+                      "surface-container-lowest": "#ffffff",
+                      "primary-fixed-dim": "#85d5c9",
+                      "secondary-container": "#d2e1fa",
+                      "tertiary": "#6e341d",
+                      "outline": "#6e7977",
+                      "clinical-abnormal": "#BE123C",
+                      "tertiary-container": "#8b4b32",
+                      "on-tertiary-fixed-variant": "#71361f",
+                      "primary-fixed": "#a1f1e5",
+                      "on-primary-fixed": "#00201d",
+                      "on-surface": "#181c1c",
+                      "on-secondary-fixed": "#0d1c2e",
+                      "primary-container": "#00685f",
+                      "surface-container-low": "#f1f4f2",
+                      "border-subtle": "#E2E8F0"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "margin-edge": "24px",
+                      "max-width": "1440px",
+                      "gutter": "16px",
+                      "panel-padding": "20px",
+                      "unit": "4px"
+              },
+              "fontFamily": {
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Geist"
+                      ],
+                      "headline-md": [
+                              "Geist"
+                      ],
+                      "headline-lg-mobile": [
+                              "Geist"
+                      ],
+                      "label-caps": [
+                              "Inter"
+                      ],
+                      "data-tabular": [
+                              "JetBrains Mono"
+                      ]
+              },
+              "fontSize": {
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg": [
+                              "30px",
+                              {
+                                      "lineHeight": "36px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-caps": [
+                              "11px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "data-tabular": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "500"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+          .material-symbols-outlined {
+              font-family: 'Material Symbols Outlined';
+              font-weight: normal;
+              font-style: normal;
+              font-size: 20px;
+              line-height: 1;
+              letter-spacing: normal;
+              text-transform: none;
+              display: inline-block;
+              white-space: nowrap;
+              word-wrap: normal;
+              direction: ltr;
+              -webkit-font-feature-settings: 'liga';
+              -webkit-font-smoothing: antialiased;
+          }
+          
+          /* Hide scrollbar for clean cockpit look */
+          ::-webkit-scrollbar {
+              width: 6px;
+              height: 6px;
+          }
+          ::-webkit-scrollbar-track {
+              background: transparent;
+          }
+          ::-webkit-scrollbar-thumb {
+              background: #d7dbd9; /* surface-dim */
+              border-radius: 10px;
+          }
+          ::-webkit-scrollbar-thumb:hover {
+              background: #bec9c6; /* outline-variant */
+          }
+      </style>
+</head>
+<body class="bg-background text-on-background h-screen flex flex-col overflow-hidden font-body-sm text-body-sm">
+<!-- Contextual Top Bar (Task-Focused: active simulation) -->
+<header class="flex justify-between items-center w-full px-margin-edge h-16 bg-surface border-b border-border-subtle shrink-0">
+<div class="flex items-center gap-4">
+<button class="text-secondary hover:bg-surface-container-low p-2 rounded-full transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-primary">Case 42: Acute Chest Pain</span>
+<span class="font-body-sm text-body-sm text-secondary">Patient: Arthur Pendelton, 58yo M</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded-lg border border-border-subtle">
+<span class="material-symbols-outlined text-secondary" data-icon="timer">timer</span>
+<span class="font-data-tabular text-data-tabular text-on-surface">14:32</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-clinical-success animate-pulse"></div>
+<span class="font-label-caps text-label-caps text-clinical-success">Session Active</span>
+</div>
+<button class="bg-primary text-on-primary font-body-sm text-body-sm px-4 py-2 rounded-lg hover:opacity-90 transition-opacity">
+                End Session
+            </button>
+</div>
+</header>
+<!-- Main Workspace (3-Column Grid) -->
+<main class="flex-1 w-full max-w-max-width mx-auto grid grid-cols-1 md:grid-cols-12 gap-gutter p-gutter min-h-0">
+<!-- Left Column: Patient Context & Vitals -->
+<aside class="col-span-1 md:col-span-3 flex flex-col gap-4 overflow-y-auto">
+<!-- Patient Chart Summary -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-lg p-panel-padding flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Arthur Pendelton</h2>
+<p class="font-body-sm text-body-sm text-secondary">MRN: 893-442-11</p>
+</div>
+<span class="bg-surface-container px-2 py-1 rounded font-label-caps text-label-caps text-secondary">FULL CODE</span>
+</div>
+<div class="grid grid-cols-2 gap-y-2 mt-2 border-t border-border-subtle pt-3">
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps text-outline">AGE / SEX</span>
+<span class="font-body-sm text-body-sm text-on-surface">58 / M</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps text-outline">WT / HT</span>
+<span class="font-body-sm text-body-sm text-on-surface">82 kg / 178 cm</span>
+</div>
+<div class="flex flex-col col-span-2">
+<span class="font-label-caps text-label-caps text-outline">ALLERGIES</span>
+<span class="font-body-sm text-body-sm text-error">Penicillin (Anaphylaxis)</span>
+</div>
+</div>
+</div>
+<!-- Chief Complaint -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-lg p-panel-padding flex flex-col gap-2">
+<span class="font-label-caps text-label-caps text-outline flex items-center gap-1">
+<span class="material-symbols-outlined" data-icon="campaign" style="font-size: 14px;">campaign</span> Chief Complaint
+                </span>
+<p class="font-body-sm text-body-sm text-on-surface font-medium">
+                    "My chest feels like someone is sitting on it, and it's hard to breathe."
+                </p>
+</div>
+<!-- Vitals Grid -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-lg p-panel-padding flex flex-col gap-3">
+<div class="flex justify-between items-center">
+<span class="font-label-caps text-label-caps text-outline flex items-center gap-1">
+<span class="material-symbols-outlined" data-icon="vital_signs" style="font-size: 14px;">vital_signs</span> Current Vitals
+                    </span>
+<span class="font-label-caps text-label-caps text-secondary">Updated 2m ago</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<!-- Abnormal Vital -->
+<div class="bg-error-container border-l-2 border-clinical-abnormal p-2 rounded flex flex-col">
+<span class="font-label-caps text-label-caps text-on-error-container opacity-80">HR (BPM)</span>
+<span class="font-data-tabular text-data-tabular text-on-error-container text-lg font-bold">112 <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">arrow_upward</span></span>
+</div>
+<!-- Normal Vitals -->
+<div class="bg-surface-container-low p-2 rounded flex flex-col border border-transparent">
+<span class="font-label-caps text-label-caps text-secondary">BP (mmHg)</span>
+<span class="font-data-tabular text-data-tabular text-on-surface text-lg">145/92</span>
+</div>
+<div class="bg-surface-container-low p-2 rounded flex flex-col border border-transparent">
+<span class="font-label-caps text-label-caps text-secondary">SpO2 (%)</span>
+<span class="font-data-tabular text-data-tabular text-on-surface text-lg">94%</span>
+</div>
+<div class="bg-surface-container-low p-2 rounded flex flex-col border border-transparent">
+<span class="font-label-caps text-label-caps text-secondary">RR (/min)</span>
+<span class="font-data-tabular text-data-tabular text-on-surface text-lg">22</span>
+</div>
+<div class="bg-surface-container-low p-2 rounded flex flex-col border border-transparent">
+<span class="font-label-caps text-label-caps text-secondary">TEMP (°C)</span>
+<span class="font-data-tabular text-data-tabular text-on-surface text-lg">37.2</span>
+</div>
+</div>
+</div>
+<!-- Learning Objectives -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-lg p-panel-padding flex flex-col gap-2">
+<span class="font-label-caps text-label-caps text-outline flex items-center gap-1">
+<span class="material-symbols-outlined" data-icon="flag" style="font-size: 14px;">flag</span> Session Objectives
+                </span>
+<ul class="flex flex-col gap-2 mt-1">
+<li class="flex items-start gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-outline mt-1.5 shrink-0"></div>
+<span class="font-body-sm text-body-sm text-secondary">Identify cardinal signs of ACS.</span>
+</li>
+<li class="flex items-start gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-outline mt-1.5 shrink-0"></div>
+<span class="font-body-sm text-body-sm text-secondary">Order appropriate initial investigations (ECG, Trop).</span>
+</li>
+</ul>
+</div>
+</aside>
+<!-- Center Column: Patient Interaction (Chat) -->
+<section class="col-span-1 md:col-span-5 flex flex-col bg-surface-container-lowest border border-border-subtle rounded-lg overflow-hidden">
+<!-- Chat Header -->
+<div class="bg-surface-container border-b border-border-subtle px-4 py-3 flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center text-primary font-headline-md text-headline-md">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium">Patient Interaction</span>
+<span class="font-label-caps text-label-caps text-secondary">Voice / Text</span>
+</div>
+</div>
+<!-- Chat Transcript Area -->
+<div class="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-surface">
+<!-- System Message -->
+<div class="text-center">
+<span class="bg-surface-variant text-secondary font-label-caps text-label-caps px-2 py-1 rounded">Session Started</span>
+</div>
+<!-- Learner Bubble -->
+<div class="self-end max-w-[85%] bg-primary-container text-on-primary-container p-3 rounded-lg rounded-br-none">
+<p class="font-body-sm text-body-sm">Hello Mr. Pendelton, I'm Dr. Smith. I understand you're having chest pain. Can you tell me when it started?</p>
+</div>
+<!-- Patient Bubble -->
+<div class="self-start max-w-[85%] bg-surface-container-low text-on-surface p-3 rounded-lg rounded-bl-none border border-border-subtle">
+<p class="font-body-sm text-body-sm">It started about an hour ago while I was watching TV. It just came out of nowhere.</p>
+</div>
+<!-- Learner Bubble -->
+<div class="self-end max-w-[85%] bg-primary-container text-on-primary-container p-3 rounded-lg rounded-br-none">
+<p class="font-body-sm text-body-sm">Does the pain move anywhere else, like to your arm or jaw?</p>
+</div>
+<!-- Patient Bubble -->
+<div class="self-start max-w-[85%] bg-surface-container-low text-on-surface p-3 rounded-lg rounded-bl-none border border-border-subtle">
+<p class="font-body-sm text-body-sm">Yeah, it kind of shoots down my left arm a bit. It feels really tight.</p>
+</div>
+<!-- Invisible element to scroll to bottom -->
+<div id="chat-bottom"></div>
+</div>
+<!-- Input Area -->
+<div class="bg-surface-container border-t border-border-subtle p-4 flex flex-col gap-3">
+<!-- Quick Prompts (Pills) -->
+<div class="flex flex-wrap gap-2">
+<button class="border border-outline-variant text-secondary rounded-xl px-3 py-1 font-label-caps text-label-caps hover:bg-surface-variant hover:text-on-surface transition-colors">
+                        ONSET &amp; DURATION
+                    </button>
+<button class="border border-outline-variant text-secondary rounded-xl px-3 py-1 font-label-caps text-label-caps hover:bg-surface-variant hover:text-on-surface transition-colors">
+                        ASSOCIATED SYMPTOMS
+                    </button>
+<button class="border border-outline-variant text-secondary rounded-xl px-3 py-1 font-label-caps text-label-caps hover:bg-surface-variant hover:text-on-surface transition-colors">
+                        CURRENT MEDS
+                    </button>
+</div>
+<!-- Fixed Input Field -->
+<div class="relative flex items-center">
+<button class="absolute left-3 text-secondary hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="mic">mic</span>
+</button>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg pl-10 pr-12 py-3 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Type your question to the patient..." type="text"/>
+<button class="absolute right-3 text-primary hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined" data-icon="send">send</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Right Column: Workspace Tabs (Exam, Labs, etc.) -->
+<aside class="col-span-1 md:col-span-4 flex flex-col bg-surface-container-lowest border border-border-subtle rounded-lg overflow-hidden">
+<!-- Tabs Header -->
+<div class="flex border-b border-border-subtle bg-surface-container">
+<button class="flex-1 py-3 px-2 font-label-caps text-label-caps text-secondary hover:text-on-surface transition-colors">
+                    EXAM
+                </button>
+<button class="flex-1 py-3 px-2 font-label-caps text-label-caps text-primary border-b-2 border-primary bg-surface transition-colors">
+                    LABS
+                </button>
+<button class="flex-1 py-3 px-2 font-label-caps text-label-caps text-secondary hover:text-on-surface transition-colors">
+                    IMAGING
+                </button>
+<button class="flex-1 py-3 px-2 font-label-caps text-label-caps text-secondary hover:text-on-surface transition-colors">
+                    NOTES
+                </button>
+</div>
+<!-- Tab Content (Investigations/Labs Active) -->
+<div class="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+<div class="flex justify-between items-center">
+<h3 class="font-headline-md text-headline-md text-on-surface">Recent Results</h3>
+<button class="text-primary font-body-sm text-body-sm flex items-center gap-1 hover:underline">
+<span class="material-symbols-outlined" data-icon="add" style="font-size: 16px;">add</span> Order
+                    </button>
+</div>
+<!-- Lab Panel: Cardiac Markers -->
+<div class="flex flex-col gap-2">
+<h4 class="font-label-caps text-label-caps text-secondary border-b border-border-subtle pb-1">CARDIAC MARKERS</h4>
+<div class="border border-border-subtle rounded-lg overflow-hidden">
+<table class="w-full text-left">
+<thead class="bg-surface-container-low border-b border-border-subtle">
+<tr>
+<th class="p-2 font-label-caps text-label-caps text-secondary w-1/2">Test</th>
+<th class="p-2 font-label-caps text-label-caps text-secondary">Value</th>
+<th class="p-2 font-label-caps text-label-caps text-secondary text-right">Ref</th>
+</tr>
+</thead>
+<tbody class="font-data-tabular text-data-tabular text-body-sm">
+<!-- Abnormal Lab -->
+<tr class="bg-error-container/40 border-b border-border-subtle">
+<td class="p-2 text-on-surface border-l-2 border-clinical-abnormal">Troponin I</td>
+<td class="p-2 text-clinical-abnormal font-bold">0.84 H</td>
+<td class="p-2 text-secondary text-right">&lt; 0.04</td>
+</tr>
+<tr>
+<td class="p-2 text-on-surface border-l-2 border-transparent">CK-MB</td>
+<td class="p-2 text-on-surface">6.2</td>
+<td class="p-2 text-secondary text-right">0-7.0</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Lab Panel: CBC -->
+<div class="flex flex-col gap-2">
+<h4 class="font-label-caps text-label-caps text-secondary border-b border-border-subtle pb-1">COMPLETE BLOOD COUNT</h4>
+<div class="border border-border-subtle rounded-lg overflow-hidden">
+<table class="w-full text-left">
+<thead class="bg-surface-container-low border-b border-border-subtle">
+<tr>
+<th class="p-2 font-label-caps text-label-caps text-secondary w-1/2">Test</th>
+<th class="p-2 font-label-caps text-label-caps text-secondary">Value</th>
+<th class="p-2 font-label-caps text-label-caps text-secondary text-right">Ref</th>
+</tr>
+</thead>
+<tbody class="font-data-tabular text-data-tabular text-body-sm">
+<tr class="border-b border-border-subtle">
+<td class="p-2 text-on-surface border-l-2 border-transparent">WBC</td>
+<td class="p-2 text-on-surface">8.4</td>
+<td class="p-2 text-secondary text-right">4.5-11.0</td>
+</tr>
+<tr class="border-b border-border-subtle">
+<td class="p-2 text-on-surface border-l-2 border-transparent">Hgb</td>
+<td class="p-2 text-on-surface">14.2</td>
+<td class="p-2 text-secondary text-right">13.5-17.5</td>
+</tr>
+<tr>
+<td class="p-2 text-on-surface border-l-2 border-transparent">Plt</td>
+<td class="p-2 text-on-surface">240</td>
+<td class="p-2 text-secondary text-right">150-450</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</aside>
+</main>
+<script>
+        // Simple script to ensure chat stays scrolled to bottom on load
+        document.addEventListener("DOMContentLoaded", function() {
+            var chatBottom = document.getElementById("chat-bottom");
+            if(chatBottom) {
+                chatBottom.scrollIntoView();
+            }
+        });
+    </script>
+</body></html>

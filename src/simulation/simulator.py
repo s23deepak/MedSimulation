@@ -15,7 +15,8 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -50,6 +51,7 @@ class SimulationSession:
     # Submissions
     diagnosis_submitted: str = ""
     management_submitted: list[str] = field(default_factory=list)
+    clinical_notes: str = ""
 
     # Scoring & debrief
     score: dict | None = None
@@ -59,10 +61,20 @@ class SimulationSession:
     status: str = "active"   # active | submitted | scored
     started_at: str = field(default_factory=lambda: datetime.now().isoformat())
     completed_at: str = ""
+    owner_id: str = ""
 
     def to_dict(self) -> dict:
         return {
             "session_id": self.session_id,
+            "owner_id": self.owner_id,
+            "case_snapshot": asdict(self.case),
+            "case_version": self.case.version,
+            "review_status": self.case.status,
+            "reviewer": self.case.reviewer,
+            "approved_at": self.case.approved_at,
+            "scoring_available": self.case.status == "approved" and bool(self.case.rubric),
+            "available_exams": list(self.case.physical_exam),
+            "available_investigations": list(self.case.investigations),
             "resident_name": self.resident_name,
             "case_id": self.case_id,
             "case_title": self.case.title,
@@ -71,6 +83,7 @@ class SimulationSession:
             "presentation": self.case.presentation,
             "patient_image_url": getattr(self.case, "patient_image_url", ""),
             "initial_vitals": self.case.initial_vitals,
+            "abnormal_vitals": self.case.abnormal_vitals,
             "learning_objectives": self.case.learning_objectives,
             "history_questions": self.history_questions,
             "exam_systems_viewed": self.exam_systems_viewed,
@@ -88,6 +101,11 @@ class SimulationSession:
             ],
             "diagnosis_submitted": self.diagnosis_submitted,
             "management_submitted": self.management_submitted,
+            "clinical_notes": self.clinical_notes,
+            "ordered_results": [
+                {"investigation": name, "result": next((value for key, value in self.case.investigations.items() if name.lower() in key.lower() or key.lower() in name.lower()), "Result not recorded.")}
+                for name in self.investigations_ordered
+            ],
             "score": self.score,
             "debrief": self.debrief,
             "status": self.status,
@@ -125,15 +143,16 @@ class SimulationEngine:
 
     # ── Session lifecycle ──────────────────────────────────────────────────────
 
-    def start_session(self, resident_name: str, case_id: str) -> SimulationSession:
+    def start_session(self, resident_name: str, case_id: str, owner_id: str = "") -> SimulationSession:
         case = get_case(case_id)
         if case is None:
             raise ValueError(f"Case {case_id} not found")
         session = SimulationSession(
-            session_id=f"SIM-{uuid.uuid4().hex[:8].upper()}",
+            session_id=f"SIM-{uuid.uuid4().hex.upper()}",
             resident_name=resident_name,
             case_id=case_id,
-            case=case,
+            case=deepcopy(case),
+            owner_id=owner_id,
         )
         self._sessions[session.session_id] = session
         self._persist_session(session)
@@ -144,17 +163,14 @@ class SimulationEngine:
         return session
 
     def get_session(self, session_id: str) -> SimulationSession | None:
-        # Try in-memory cache first
-        if session_id in self._sessions:
-            return self._sessions[session_id]
-
         # Fall back to database (for cross-container requests)
         session_data = load_session(session_id)
         if session_data is None:
             return None
 
         # Reconstruct session from DB
-        case = get_case(session_data.get("case_id"))
+        snapshot = session_data.get("case_snapshot")
+        case = ClinicalCase(**snapshot) if snapshot else get_case(session_data.get("case_id"))
         if case is None:
             logger.warning("Session %s references non-existent case %s", session_id, session_data.get("case_id"))
             return None
@@ -164,6 +180,7 @@ class SimulationEngine:
             resident_name=session_data.get("resident_name"),
             case_id=session_data.get("case_id"),
             case=case,
+            owner_id=session_data.get("owner_id", ""),
         )
         # Restore state
         session.history_questions = session_data.get("history_questions", [])
@@ -173,6 +190,7 @@ class SimulationEngine:
         session.action_log = session_data.get("action_log", [])
         session.diagnosis_submitted = session_data.get("diagnosis_submitted", "")
         session.management_submitted = session_data.get("management_submitted", [])
+        session.clinical_notes = session_data.get("clinical_notes", "")
         session.score = session_data.get("score")
         session.debrief = session_data.get("debrief")
         session.status = session_data.get("status", "active")
@@ -185,10 +203,7 @@ class SimulationEngine:
 
     def _persist_session(self, session: SimulationSession) -> None:
         """Persist session state to database."""
-        try:
-            save_session(session.to_dict())
-        except Exception as e:
-            logger.warning("Failed to persist session %s: %s", session.session_id, e)
+        save_session(session.to_dict())
 
     # ── Interactions ───────────────────────────────────────────────────────────
 
@@ -201,25 +216,32 @@ class SimulationEngine:
         case = session.case
         history_ctx = "\n".join(f"- {k}: {v}" for k, v in case.history_data.items())
 
-        if self._chain is not None:
-            try:
-                result = self._chain.invoke(
-                    {
-                        "case_presentation": case.presentation,
-                        "history_context": history_ctx,
-                        "question": question,
-                    },
-                    config={"configurable": {"session_id": session_id}},
-                )
-                response = self._clean_response(result.content)
-                ai = True
-            except Exception as e:
-                logger.warning("Chain history response failed: %s", e)
-                response = self._keyword_patient_response(case, question)
-                ai = False
-        else:
-            response = self._keyword_patient_response(case, question)
-            ai = False
+        if self._chain is None:
+            raise RuntimeError("Patient response model is not configured")
+
+        # Rebuild the prompt history after a worker restart or request on a
+        # different worker; the durable transcript remains the source of truth.
+        from langchain_core.messages import AIMessage, HumanMessage
+        from .chat_chain import get_session_history
+        prompt_history = get_session_history(session_id)
+        if not prompt_history.messages and session.history_questions:
+            for turn in session.history_questions:
+                prompt_history.add_messages([HumanMessage(content=turn["question"]), AIMessage(content=turn["response"])])
+
+        try:
+            result = self._chain.invoke(
+                {
+                    "case_presentation": case.presentation,
+                    "history_context": history_ctx,
+                    "question": question,
+                },
+                config={"configurable": {"session_id": session_id}},
+            )
+            response = self._clean_response(result.content)
+            ai = True
+        except Exception as e:
+            logger.warning("Chain history response failed: %s", e)
+            raise RuntimeError("Patient response model is unavailable") from e
 
         entry = {
             "question": question,
@@ -349,19 +371,24 @@ class SimulationEngine:
 
     def _complete_scoring(self, session, session_id: str) -> dict:
         """Complete full scoring (rule-based + AI) synchronously."""
-        # Score with AI
-        score_result = score_session(session, agent=self.agent)
-        session.score = score_result.to_dict()
-
-        # Debrief
-        debrief_result = generate_debrief(session, score_result, agent=self.agent)
-        session.debrief = debrief_result.to_dict()
+        from .safety import DISCLAIMER
+        if session.case.status == "approved" and session.case.rubric:
+            score_result = score_session(session, agent=self.agent)
+            session.score = score_result.to_dict()
+            session.debrief = generate_debrief(session, score_result, agent=self.agent).to_dict()
+        else:
+            session.score = None
+            session.debrief = {
+                "summary": "Practice completed. This case has not been clinically reviewed; numeric scoring is unavailable.",
+                "coaching_points": ["Reflect on your differential diagnosis and the evidence for your management plan.", "Revisit this case with a clinical instructor when one is available."],
+                "ai_narrative": "", "disclaimer": DISCLAIMER,
+            }
 
         session.status = "scored"
         session.completed_at = datetime.now().isoformat()
 
         # Persist final session state
-        self._persist_session(session)
+        save_session(session.to_dict(), actor=session.owner_id or "local")
 
         # Release LangChain message history — session is complete
         clear_session_history(session_id)
@@ -372,6 +399,7 @@ class SimulationEngine:
             "scores": session.score,
             "debrief": session.debrief,
             "ai_ready": True,
+            "disclaimer": DISCLAIMER,
         }
 
     # ── Helpers ────────────────────────────────────────────────────────────────

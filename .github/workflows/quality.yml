@@ -1,0 +1,30 @@
+name: Quality
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: medsimulation_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      TEST_POSTGRES_URL: postgresql+psycopg://postgres:test@localhost:5432/medsimulation_test
+      RUN_BROWSER_QA: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --group dev
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run ruff check main.py src scripts tests
+      - run: uv run ruff format --check main.py src/web src/simulation/safety.py src/simulation/rubrics.py
+      - run: uv run mypy
+      - run: uv run pytest -q
+      - run: docker build -t medsimulation:test .

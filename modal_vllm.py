@@ -2,8 +2,7 @@
 MedSimulation — Standalone vLLM Server on Modal
 
 Deploy MedGemma 4B as a standalone OpenAI-compatible vLLM server.
-Use this if you want a separate LLM endpoint (e.g., paired with a CPU-only
-frontend on Railway/Render).
+Use this if you want a separate LLM endpoint paired with a CPU-only web app.
 
 Usage:
     # One-time model pre-cache (run this first!):
@@ -12,7 +11,7 @@ Usage:
     # Deploy standalone server:
     modal deploy modal_vllm.py
 
-Then set in Railway/Render:
+Then set in the web app environment:
     VLLM_MODE=cloud
     VLLM_CLOUD_URL=https://your-username--medsimulation-vllm-server.modal.run/v1
     VLLM_CLOUD_API_KEY=your-modal-api-key

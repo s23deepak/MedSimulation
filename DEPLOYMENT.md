@@ -1,202 +1,145 @@
 # MedSimulation Deployment Guide
 
-Deploy your PWA to production with HTTPS for mobile app distribution.
+For the temporary resident pilot, the app runs without built-in accounts or
+passwords. Anyone with the link can open the app as the shared `pilot-learner`
+identity. Use synthetic cases only and do not enter identifiable patient
+information. Reviewer actions are unavailable until third-party auth is added,
+and cases without clinical review remain unscored. Hosted deployments require
+`APP_ENV=demo` or `production`, an explicit HTTPS `ALLOWED_ORIGINS`, and a
+Postgres `DATABASE_URL`. Startup refuses to run without these hosted values.
+See [the current workflow](docs/WORKFLOW.md) for case review rules.
 
----
+Patient conversation and case generation require a configured LLM backend.
+Configure one of these inference paths before deploying:
 
-## Option 1: Railway (Recommended - Easiest)
+- `VLLM_MODE=local`: run an OpenAI-compatible vLLM server next to the app.
+- `VLLM_MODE=cloud`: connect the app to a remote OpenAI-compatible LLM endpoint.
+- `VLLM_MODE=modal`: use the Modal RPC path in `modal_app.py`.
 
-**Free tier:** $5 credit/month, enough for light usage
+## Option 1: Docker With Local vLLM
 
-### Steps:
+Use this path for GPU-capable hosts.
 
-1. **Push code to GitHub**
+1. Build the image:
+
    ```bash
-   git add -A
-   git commit -m "feat: PWA mobile app deployment ready"
-   git push origin progressive-web-app
+   docker build --build-arg MEDSIM_EXTRAS=gpu -t medsimulation .
    ```
 
-2. **Deploy on Railway**
-   - Go to https://railway.app
-   - Click "New Project" → "Deploy from GitHub repo"
-   - Select `MedSimulation` repo
-   - Railway auto-detects Dockerfile
+2. Run with GPU access and persistent data:
 
-3. **Configure environment variables**
+   ```bash
+   docker run --gpus all \
+     -e VLLM_MODE=local \
+     -e VLLM_MODEL=google/medgemma-4b-it \
+     -e VLLM_MAX_MODEL_LEN=1024 \
+     -e APP_ENV=production \
+     -e DATABASE_URL=postgresql+psycopg://... \
+     -e ALLOWED_ORIGINS=https://your-app.example \
+     -v medsimulation-data:/app/data \
+     -p 8000:8000 \
+     -p 8001:8001 \
+     medsimulation
    ```
-   VLLM_MODE=simulated    # Or 'local'/'cloud' if you have vLLM
+
+3. Verify:
+
+   ```bash
+   curl http://localhost:8000/api/health
+   python scripts/deployment_smoke.py https://your-app.example
+   ```
+
+## Option 2: CPU App With Cloud LLM
+
+Use this path for hosts without GPUs. The app still requires an LLM, but the
+model runs behind a remote OpenAI-compatible API.
+
+1. Deploy a cloud LLM endpoint. Modal is the project-native option:
+
+   ```bash
+   modal run modal_app.py::download_model
+   modal deploy modal_vllm.py
+   ```
+
+2. Configure the web app environment:
+
+   ```env
+   VLLM_MODE=cloud
+   VLLM_CLOUD_URL=https://your-username--medsimulation-vllm-server.modal.run/v1
+   VLLM_CLOUD_API_KEY=your-api-key
+   VLLM_MODEL=google/medgemma-4b-it
+   APP_ENV=production
+   DATABASE_URL=postgresql+psycopg://...
+   ALLOWED_ORIGINS=https://your-app.example
    PORT=8000
    ```
 
-4. **Add persistent storage** (for case database)
-   - In Railway dashboard: New → Volume
-   - Mount path: `/app/data`
-   - Size: 1GB minimum
+3. Start the app:
 
-5. **Get your URL**
-   - Railway gives you: `https://medsimulation-production.up.railway.app`
-   - PWA is now installable with HTTPS!
-
----
-
-## Option 2: Render
-
-**Free tier:** Available with web service spinning down after inactivity
-
-### Steps:
-
-1. **Push code to GitHub** (same as above)
-
-2. **Deploy on Render**
-   - Go to https://render.com
-   - Click "New +" → "Web Service"
-   - Connect GitHub repo
-   - Select `render.yaml` for auto-configuration
-
-3. **Settings**
-   - Region: Oregon (closest to most users)
-   - Plan: Starter (free) or Standard ($7/mo)
-   - Python version: 3.12
-
-4. **Add Disk** (for persistent data)
-   - Mount path: `/app/data`
-   - Size: 1GB
-
----
-
-## Option 3: Fly.io
-
-**Free tier:** Limited, but very cheap (~$2/mo for small app)
-
-### Steps:
-
-1. **Install Fly CLI**
    ```bash
-   curl -L https://fly.io/install.sh | sh
-   fly auth signup
+   python main.py --host 0.0.0.0 --port ${PORT:-8000}
    ```
 
-2. **Deploy**
-   ```bash
-   fly launch --name medsimulation
-   fly volumes create medsim_data --size 1 --region ord
-   fly deploy
-   ```
+## Option 3: Modal All-In-One
 
-3. **Your URL**: `https://medsimulation.fly.dev`
+Use this path when you want Modal to host both the FastAPI app and GPU-backed
+LLM service.
 
----
-
-## Option 4: Vercel (Frontend) + Railway (Backend)
-
-For maximum performance, split frontend and backend:
-
-### Frontend (Vercel):
 ```bash
-cd frontend
-npm install -g vercel
-vercel
+modal run modal_app.py::download_model
+modal deploy modal_app.py
 ```
 
-### Backend (Railway):
-Same as Option 1, but API-only.
+Open the deployed `medsimulation-serve` URL from the Modal output.
 
-Update frontend `.env`:
-```
-VITE_API_URL=https://medsimulation-production.up.railway.app
-```
+## Railway Notes
 
----
+Railway can host the FastAPI layer when `VLLM_MODE=cloud` is configured. Do not
+use Railway as the local vLLM host unless the selected Railway runtime provides
+the required GPU and CUDA support.
 
-## Post-Deployment Checklist
+Required variables:
 
-### 1. Test PWA Features
-- [ ] Manifest loads: `https://your-domain.com/static/manifest.json`
-- [ ] Service worker registers
-- [ ] Install prompt appears on mobile
-- [ ] Offline mode works
+| Variable | Purpose |
+|----------|---------|
+| `VLLM_MODE=cloud` | Select remote LLM mode |
+| `VLLM_CLOUD_URL` | OpenAI-compatible `/v1` endpoint |
+| `VLLM_CLOUD_API_KEY` | Endpoint authentication |
+| `VLLM_MODEL` | Served model name |
+| `PORT` | Web server port |
+| `APP_ENV=demo` | Hosted pilot mode |
+| `DATABASE_URL` | Persistent Postgres database |
+| `ALLOWED_ORIGINS` | Exact HTTPS app origin |
 
-### 2. Configure Custom Domain (Optional)
-- Railway: Settings → Domains → Add custom domain
-- Render: Settings → Custom Domain
-- Add DNS records as instructed
+Use managed Postgres for sessions and review metadata. Mount persistent storage
+for imaging at `/app/data`; do not ship the development SQLite database.
 
-### 3. Environment Variables for Production
+## Post-Deployment Checks
 
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `VLLM_MODE` | `simulated` | Use keyword mode (no GPU) |
-| `VLLM_MODE` | `cloud` | Use cloud vLLM (needs API key) |
-| `VLLM_CLOUD_URL` | Your vLLM endpoint | Cloud inference URL |
-| `VLLM_CLOUD_API_KEY` | Your API key | Authentication |
-| `OPENAI_API_KEY` | Optional | For voice generation |
-
-### 4. Database Backup
-Set up automated backups for `data/medsim.db`:
-- Railway: Built-in postgres available
-- Render: Use Render Postgres add-on
-- Or export JSON backups via `/api/cases/db` endpoint
-
----
-
-## Sharing Your PWA
-
-Once deployed, share with users:
-
-### QR Code for Easy Install
-```bash
-# Generate QR code for your URL
-qrcode-terminal https://your-domain.com
-```
-
-### Instructions for Users:
-
-**iOS Safari:**
-1. Open your app URL
-2. Tap Share button
-3. "Add to Home Screen"
-
-**Android Chrome:**
-1. Open your app URL
-2. Tap menu (⋮) → "Install app"
-3. Or: Settings → Apps → "Add to Home screen"
-
----
+- `GET /api/health` returns `status: ok` and loaded cases.
+- `GET /api/model/status` reports a connected LLM backend.
+- `/simulation` loads the case library independently of model readiness.
+- Starting a case and asking a history question returns an AI patient response.
+- Completed sessions export PDF and JSON successfully. Unreviewed cases export
+  without numeric scores. Run `scripts/deployment_smoke.py` for this flow.
 
 ## Troubleshooting
 
-### PWA doesn't show install prompt
-- Ensure HTTPS (required except localhost)
-- Check manifest is valid: Chrome DevTools → Application → Manifest
-- Service worker must be registered
+### App fails during startup
 
-### App shows "Offline" constantly
-- Check API endpoints are accessible
-- Service worker might be caching error responses
-- Clear cache: DevTools → Application → Clear storage
+Check `VLLM_MODE`. It must be `local`, `cloud`, or `modal`.
+
+### Case library never appears
+
+The case library loads independently of the model. Check browser errors, the
+  database migration, and `/api/cases/recommended`.
+
+### Local Docker cannot find `vllm`
+
+Rebuild the image after dependency changes. The Dockerfile installs the `gpu`
+extra because local mode starts vLLM in the container.
 
 ### Database resets on redeploy
-- Ensure persistent volume is mounted at `/app/data`
-- Check mount path matches in deployment config
 
----
-
-## Cost Estimates
-
-| Platform | Free Tier | Paid (Production) |
-|----------|-----------|-------------------|
-| Railway | $5 credit | ~$5-10/mo |
-| Render | Free (spins down) | $7/mo |
-| Fly.io | Limited free | ~$2-5/mo |
-| Vercel + Railway | Free frontend | ~$5-10/mo total |
-
----
-
-## Next Steps
-
-1. Choose deployment platform
-2. Push `progressive-web-app` branch to GitHub
-3. Follow platform-specific steps above
-4. Test PWA install on your phone
-5. Share URL with users!
+Confirm `DATABASE_URL` points to persistent Postgres and imaging storage is
+mounted at `/app/data`.

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Scoring &amp; Debrief - Clinical Cockpit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Geist:wght@600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary": "#ffffff",
+                      "secondary-fixed-dim": "#b9c7e0",
+                      "on-background": "#181c1c",
+                      "surface-container-high": "#e6e9e7",
+                      "surface-dim": "#d7dbd9",
+                      "error": "#ba1a1a",
+                      "on-surface-variant": "#3e4947",
+                      "outline-variant": "#bec9c6",
+                      "surface-container": "#eceef0",
+                      "surface-bright": "#f7faf8",
+                      "on-secondary-container": "#556379",
+                      "primary": "#004e47",
+                      "inverse-surface": "#2d3130",
+                      "on-primary-fixed-variant": "#005049",
+                      "on-tertiary-container": "#ffc9b7",
+                      "on-tertiary": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "tertiary-fixed-dim": "#ffb59a",
+                      "inverse-on-surface": "#eef1ef",
+                      "surface-variant": "#e0e3e1",
+                      "surface": "#f7faf8",
+                      "on-primary": "#ffffff",
+                      "surface-tint": "#066a61",
+                      "secondary-fixed": "#d5e3fc",
+                      "secondary": "#515f74",
+                      "inverse-primary": "#85d5c9",
+                      "on-error": "#ffffff",
+                      "clinical-success": "#059669",
+                      "tertiary-fixed": "#ffdbcf",
+                      "on-error-container": "#93000a",
+                      "on-secondary-fixed-variant": "#3a485c",
+                      "on-primary-container": "#93e4d8",
+                      "background": "#f7faf8",
+                      "surface-container-highest": "#e0e3e1",
+                      "on-tertiary-fixed": "#380d00",
+                      "clinical-pending": "#D97706",
+                      "surface-container-lowest": "#ffffff",
+                      "primary-fixed-dim": "#85d5c9",
+                      "secondary-container": "#d2e1fa",
+                      "tertiary": "#6e341d",
+                      "outline": "#6e7977",
+                      "clinical-abnormal": "#BE123C",
+                      "tertiary-container": "#8b4b32",
+                      "on-tertiary-fixed-variant": "#71361f",
+                      "primary-fixed": "#a1f1e5",
+                      "on-primary-fixed": "#00201d",
+                      "on-surface": "#181c1c",
+                      "on-secondary-fixed": "#0d1c2e",
+                      "primary-container": "#00685f",
+                      "surface-container-low": "#f1f4f2",
+                      "border-subtle": "#E2E8F0"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "margin-edge": "24px",
+                      "max-width": "1440px",
+                      "gutter": "16px",
+                      "panel-padding": "20px",
+                      "unit": "4px"
+              },
+              "fontFamily": {
+                      "body-sm": ["Inter"],
+                      "body-md": ["Inter"],
+                      "headline-lg": ["Geist"],
+                      "headline-md": ["Geist"],
+                      "headline-lg-mobile": ["Geist"],
+                      "label-caps": ["Inter"],
+                      "data-tabular": ["JetBrains Mono"]
+              },
+              "fontSize": {
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "headline-lg": ["30px", {"lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                      "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "data-tabular": ["14px", {"lineHeight": "20px", "fontWeight": "500"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-sm antialiased min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="bg-surface text-primary font-headline-md text-headline-md docked full-width top-0 border-b border-border-subtle flat no shadows flex justify-between items-center w-full px-margin-edge h-16 shrink-0 z-50">
+<div class="flex items-center gap-margin-edge">
+<div class="text-headline-md font-headline-md font-bold text-primary flex items-center gap-2">
+<span class="material-symbols-outlined fill">health_and_safety</span>
+                Clinical Cockpit
+            </div>
+</div>
+<div class="hidden md:flex gap-margin-edge items-center h-full">
+<nav class="flex h-full gap-8">
+<a class="text-secondary font-medium font-body-sm text-body-sm hover:bg-surface-container-low transition-colors cursor-pointer active:opacity-80 flex items-center h-full px-2" href="#">Cases</a>
+<a class="text-secondary font-medium font-body-sm text-body-sm hover:bg-surface-container-low transition-colors cursor-pointer active:opacity-80 flex items-center h-full px-2" href="#">Archive</a>
+<a class="text-primary border-b-2 border-primary font-bold pb-1 font-body-sm text-body-sm hover:bg-surface-container-low transition-colors cursor-pointer active:opacity-80 flex items-center h-full px-2" href="#">Performance</a>
+</nav>
+</div>
+<div class="flex items-center gap-gutter">
+<div class="hidden md:flex items-center gap-2">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-low transition-colors"><span class="material-symbols-outlined">settings</span></button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-low transition-colors"><span class="material-symbols-outlined">help_outline</span></button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-low transition-colors"><span class="material-symbols-outlined">account_circle</span></button>
+</div>
+<button class="bg-primary text-on-primary font-body-md text-body-md px-4 py-2 rounded-lg font-medium hover:bg-primary-container hover:text-on-primary-container transition-colors hidden sm:block">
+                End Session
+            </button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar (Desktop Only) -->
+<aside class="hidden md:flex flex-col h-full py-panel-padding gap-unit bg-surface-container-low text-primary font-label-caps text-label-caps docked left-0 h-screen w-64 border-r border-border-subtle flat no shadows shrink-0 z-40 overflow-y-auto">
+<div class="px-panel-padding mb-6 flex flex-col items-center">
+<div class="w-16 h-16 rounded-full bg-surface-variant flex items-center justify-center mb-2 overflow-hidden border border-border-subtle" data-alt="A clean, professional headshot of a young medical resident in a white coat, brightly lit against a neutral background. Modern, sharp focus, high-key lighting, conveying competence and empathy in a clinical setting." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDdqQp7hV5clt-eR8IDCEpAz45qRnn-WSvx0ar0Sb4738InFB_mwvMs3-qdnVjY3zbLhJiqox6vCmqjPc7RsRL_u340IkXQcO71T1EsoXNXqENxggNfOJneyvNoGrTBqyzy9jCAH6_8n0B63xyx5BXwV2MbEv9AXBSp8xdOOr8eVf4dt2z9f9h4j1w93ca-n8XfPi16GJlLglLDwZukecHszAwC9EHgBDWbR9AvEZAZJj1djgEak80f')"></div>
+<div class="font-body-md text-body-md font-medium text-on-surface">Dr. Simulation</div>
+<div class="font-body-sm text-body-sm text-secondary">Level 4 Resident</div>
+<button class="mt-4 w-full bg-primary text-on-primary py-2 rounded-lg font-body-sm text-body-sm hover:bg-primary-container hover:text-on-primary-container transition-colors">
+                     New Consultation
+                 </button>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="text-on-surface-variant hover:bg-surface-container transition-all duration-150 ease-in-out flex items-center gap-3 px-3 py-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">monitor_heart</span>
+<span class="font-body-sm text-body-sm">Vitals</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container transition-all duration-150 ease-in-out flex items-center gap-3 px-3 py-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">assignment</span>
+<span class="font-body-sm text-body-sm">Chart</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container transition-all duration-150 ease-in-out flex items-center gap-3 px-3 py-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">forum</span>
+<span class="font-body-sm text-body-sm">Chat</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container transition-all duration-150 ease-in-out flex items-center gap-3 px-3 py-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">medical_services</span>
+<span class="font-body-sm text-body-sm">Orders</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container transition-all duration-150 ease-in-out flex items-center gap-3 px-3 py-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">biotech</span>
+<span class="font-body-sm text-body-sm">Labs</span>
+</a>
+</nav>
+<div class="mt-auto px-2 space-y-1">
+<a class="text-on-surface-variant hover:bg-surface-container transition-all duration-150 ease-in-out flex items-center gap-3 px-3 py-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-sm text-body-sm">Settings</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container transition-all duration-150 ease-in-out flex items-center gap-3 px-3 py-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">contact_support</span>
+<span class="font-body-sm text-body-sm">Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 overflow-y-auto p-margin-edge bg-surface md:bg-surface-bright pb-24 md:pb-margin-edge">
+<div class="max-w-[1024px] mx-auto space-y-6">
+<!-- Header / Summary Section -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
+<div>
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-2">Scoring &amp; Debrief</h1>
+<p class="font-body-md text-body-md text-secondary">Case: 68M - Dyspnea on Exertion (Simulated)</p>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center gap-2 border border-border-subtle bg-surface text-on-surface px-4 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-base">picture_as_pdf</span>
+                            Export PDF
+                        </button>
+<button class="flex items-center gap-2 border border-border-subtle bg-surface text-on-surface px-4 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-base">data_object</span>
+                            Export JSON
+                        </button>
+</div>
+</div>
+<!-- Top Stats Bento -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="bg-surface-container-lowest p-6 rounded-lg border border-border-subtle flex flex-col items-center justify-center text-center">
+<div class="font-label-caps text-label-caps text-secondary mb-2 uppercase">Overall Score</div>
+<div class="font-headline-lg text-headline-lg text-primary">84%</div>
+<div class="mt-2 w-full bg-surface-container h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full" style="width: 84%"></div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-lg border border-border-subtle flex flex-col items-center justify-center text-center">
+<div class="font-label-caps text-label-caps text-secondary mb-2 uppercase">Grade Equivalent</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">B+</div>
+<div class="font-body-sm text-body-sm text-clinical-success mt-2 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">trending_up</span> Above Cohort Avg
+                        </div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-lg border border-border-subtle flex flex-col items-center justify-center text-center">
+<div class="font-label-caps text-label-caps text-secondary mb-2 uppercase">Completion Time</div>
+<div class="font-data-tabular text-data-tabular text-on-surface text-xl">18m 42s</div>
+<div class="font-body-sm text-body-sm text-secondary mt-2">Target: &lt; 20m</div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-lg border border-border-subtle flex flex-col items-center justify-center text-center">
+<div class="font-label-caps text-label-caps text-secondary mb-2 uppercase">Diagnosis Accuracy</div>
+<div class="font-headline-md text-headline-md text-on-surface text-clinical-success flex items-center gap-2">
+<span class="material-symbols-outlined fill text-clinical-success">check_circle</span>
+                            Correct
+                        </div>
+<div class="font-body-sm text-body-sm text-secondary mt-2">ADHF</div>
+</div>
+</div>
+<div class="grid md:grid-cols-3 gap-6">
+<!-- Domain Scores (Left 2 Columns) -->
+<div class="md:col-span-2 space-y-4">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-4">Domain Assessment</h2>
+<!-- History -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-border-subtle">
+<div class="flex justify-between items-center mb-2">
+<div class="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">history_edu</span>
+                                    History Gathering
+                                </div>
+<div class="font-data-tabular text-data-tabular text-secondary">
+<span class="text-primary font-bold">18</span> / 20 pts
+                                </div>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mb-3">
+<div class="bg-primary h-full" style="width: 90%"></div>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">Excellent coverage of present illness. Missed inquiring about recent dietary sodium intake changes.</p>
+</div>
+<!-- Physical -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-border-subtle">
+<div class="flex justify-between items-center mb-2">
+<div class="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">stethoscope</span>
+                                    Physical Examination
+                                </div>
+<div class="font-data-tabular text-data-tabular text-secondary">
+<span class="text-primary font-bold">16</span> / 20 pts
+                                </div>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mb-3">
+<div class="bg-primary h-full" style="width: 80%"></div>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">Thorough cardiovascular exam. Assessment of JVP was appropriate, but documentation lacked specific measurement (cm H2O).</p>
+</div>
+<!-- Investigations -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-border-subtle">
+<div class="flex justify-between items-center mb-2">
+<div class="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">science</span>
+                                    Investigations
+                                </div>
+<div class="font-data-tabular text-data-tabular text-secondary">
+<span class="text-primary font-bold">15</span> / 20 pts
+                                </div>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mb-3">
+<div class="bg-primary h-full" style="width: 75%"></div>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">Ordered appropriate initial labs (BNP, Trop, BMP). Delayed ordering CXR which is crucial in this presentation.</p>
+</div>
+<!-- Diagnosis -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-border-subtle">
+<div class="flex justify-between items-center mb-2">
+<div class="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">fact_check</span>
+                                    Diagnosis Formulation
+                                </div>
+<div class="font-data-tabular text-data-tabular text-secondary">
+<span class="text-primary font-bold">20</span> / 20 pts
+                                </div>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mb-3">
+<div class="bg-clinical-success h-full" style="width: 100%"></div>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">Correctly identified Acute Decompensated Heart Failure (ADHF) as the primary diagnosis and ruled out ACS effectively.</p>
+</div>
+<!-- Management -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-border-subtle">
+<div class="flex justify-between items-center mb-2">
+<div class="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">prescriptions</span>
+                                    Management Plan
+                                </div>
+<div class="font-data-tabular text-data-tabular text-secondary">
+<span class="text-primary font-bold">15</span> / 20 pts
+                                </div>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mb-3">
+<div class="bg-primary h-full" style="width: 75%"></div>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">Initiated IV diuretics correctly. Initial dose of furosemide was slightly conservative for a patient with established CKD stage 3.</p>
+</div>
+</div>
+<!-- Faculty Feedback Sidebar (Right Column) -->
+<div class="space-y-6">
+<!-- Overall Assessment -->
+<div class="bg-surface-container-lowest p-5 rounded-lg border border-border-subtle">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">psychology</span>
+                                Faculty Synthesis
+                            </h3>
+<p class="font-body-sm text-body-sm text-secondary leading-relaxed">
+                                Solid clinical reasoning demonstrated in a high-acuity scenario. You correctly prioritized stabilization and rapidly identified the congestive state. 
+                            </p>
+</div>
+<!-- Coaching Points -->
+<div class="bg-surface-container-lowest p-5 rounded-lg border border-border-subtle border-l-4 border-l-primary">
+<h3 class="font-body-md text-body-md font-medium text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">lightbulb</span>
+                                Key Coaching Points
+                            </h3>
+<ul class="space-y-3">
+<li class="flex items-start gap-2">
+<div class="mt-0.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0"></div>
+<span class="font-body-sm text-body-sm text-secondary">Always confirm medication adherence; dietary indiscretion is a top trigger for ADHF exacerbations.</span>
+</li>
+<li class="flex items-start gap-2">
+<div class="mt-0.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0"></div>
+<span class="font-body-sm text-body-sm text-secondary">When dosing IV loop diuretics in chronic users, initial IV dose should be at least equal to their oral home dose.</span>
+</li>
+</ul>
+</div>
+<!-- Missed Opportunities -->
+<div class="bg-surface-container-lowest p-5 rounded-lg border border-border-subtle border-l-4 border-l-clinical-abnormal">
+<h3 class="font-body-md text-body-md font-medium text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-clinical-abnormal">error</span>
+                                Missed Opportunities
+                            </h3>
+<ul class="space-y-3">
+<li class="flex items-start gap-2">
+<div class="mt-0.5 w-1.5 h-1.5 rounded-full bg-clinical-abnormal shrink-0"></div>
+<span class="font-body-sm text-body-sm text-secondary">Delayed ordering portable CXR; imaging is critical early to rule out concurrent pneumonia or alternative causes of dyspnea.</span>
+</li>
+<li class="flex items-start gap-2">
+<div class="mt-0.5 w-1.5 h-1.5 rounded-full bg-clinical-abnormal shrink-0"></div>
+<span class="font-body-sm text-body-sm text-secondary">Did not assess orthopnea or PND explicitly during the initial history phase.</span>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<!-- Action Footer -->
+<div class="flex flex-col sm:flex-row justify-end gap-4 pt-6 border-t border-border-subtle mt-8">
+<button class="px-6 py-3 rounded-lg border border-border-subtle bg-surface text-on-surface font-body-md text-body-md font-medium hover:bg-surface-container transition-colors">
+                        Back to Dashboard
+                    </button>
+<button class="px-6 py-3 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-medium hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm">
+                        Start Another Case
+                    </button>
+</div>
+</div>
+</main>
+</div>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-4 pt-2 bg-surface text-primary font-label-caps text-label-caps-mobile border-t border-border-subtle flat no shadows z-50">
+<a class="flex flex-col items-center justify-center text-secondary scale-95 active:scale-90 transition-transform active:bg-surface-container-high py-2 px-3 rounded-xl" href="#">
+<span class="material-symbols-outlined mb-1">play_circle</span>
+<span>Sim</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary scale-95 active:scale-90 transition-transform active:bg-surface-container-high py-2 px-3 rounded-xl" href="#">
+<span class="material-symbols-outlined mb-1">history</span>
+<span>History</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary scale-95 active:scale-90 transition-transform active:bg-surface-container-high py-2 px-3 rounded-xl" href="#">
+<span class="material-symbols-outlined mb-1">menu_book</span>
+<span>Library</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl px-3 py-2 scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined mb-1">analytics</span>
+<span>Debrief</span>
+</a>
+</nav>
+</body></html>

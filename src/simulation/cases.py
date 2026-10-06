@@ -78,10 +78,17 @@ class ClinicalCase:
     # Medical imaging (optional)
     imaging_studies: list[dict] = field(default_factory=list)
     patient_image_url: str = ""
+    abnormal_vitals: list[str] = field(default_factory=list)
 
     # Provenance (AI-generated cases only)
     source: str = ""        # 'pubmed' | 'wiley' | 'endless_medical' | 'ai_generated' | 'static'
     source_ref: str = ""    # PMID, DOI, or empty
+    version: int = 1
+    status: str = "pending"
+    reviewer: str | None = None
+    approved_at: str | None = None
+    review_notes: str | None = None
+    rubric: dict = field(default_factory=dict)
 
 
 # ── Case registry ─────────────────────────────────────────────────────────────

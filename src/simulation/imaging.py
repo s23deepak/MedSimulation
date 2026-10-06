@@ -12,13 +12,14 @@ from __future__ import annotations
 import logging
 import math
 import hashlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # Where imaging files live
-IMAGING_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "imaging"
+IMAGING_DIR = Path(os.getenv("DATA_DIR", str(Path(__file__).resolve().parents[2] / "data"))) / "imaging"
 
 
 # ── ECG SVG Generator ────────────────────────────────────────────────────────

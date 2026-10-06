@@ -9,7 +9,7 @@ echo "║  MedSimulation — Starting                                 ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 
 # Read environment variables
-VLLM_MODE="${VLLM_MODE:-simulated}"
+VLLM_MODE="${VLLM_MODE:-local}"
 VLLM_MODEL="${VLLM_MODEL:-google/medgemma-4b-it}"
 VLLM_PORT="${VLLM_PORT:-8001}"
 VLLM_GPU_MEMORY="${VLLM_GPU_MEMORY:-0.7}"
@@ -91,8 +91,11 @@ elif [ "$VLLM_MODE" = "cloud" ]; then
         echo "WARNING: VLLM_CLOUD_URL not set. Cloud mode may fail."
     fi
 
-elif [ "$VLLM_MODE" = "simulated" ]; then
-    echo "Simulated mode (keyword-based responses, no LLM)"
+elif [ "$VLLM_MODE" = "modal" ]; then
+    echo "Modal LLM mode enabled"
+else
+    echo "Unsupported VLLM_MODE: $VLLM_MODE. Choose local, cloud, or modal."
+    exit 1
 fi
 
 echo ""

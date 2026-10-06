@@ -127,3 +127,40 @@ def test_vllm_chat_path_uses_text_content_parts():
             "content": [{"type": "text", "text": "What about now?"}],
         },
     ]
+
+
+def test_vllm_chat_path_trims_old_history_for_local_context():
+    from langchain_core.messages import SystemMessage
+
+    class FakeVllmAgent:
+        def __init__(self):
+            self.messages = None
+
+        def sync_chat_messages(self, messages, temperature=0.7, max_tokens=512):
+            self.messages = messages
+            self.max_tokens = max_tokens
+            return "It started this morning."
+
+    agent = FakeVllmAgent()
+    runnable = MedGemmaRunnable(agent)
+    messages = [SystemMessage(content="You are a patient.")]
+    for idx in range(8):
+        messages.append(HumanMessage(content=f"question {idx}"))
+        messages.append(AIMessage(content=f"answer {idx}"))
+    messages.append(HumanMessage(content="When did it start?"))
+
+    result = runnable.invoke(messages)
+
+    assert result.content == "It started this morning."
+    assert agent.messages[0]["role"] == "system"
+    assert [msg["role"] for msg in agent.messages] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert agent.messages[1]["content"][0]["text"] == "question 6"
+    assert agent.messages[-1]["content"][0]["text"] == "When did it start?"
+    assert agent.max_tokens == 128

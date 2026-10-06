@@ -69,24 +69,18 @@ class VLLMClient:
     # ── Constructors ──────────────────────────────────────────────────────────
 
     @classmethod
-    def from_env(cls) -> VLLMClient | None:
+    def from_env(cls) -> VLLMClient | ModalVLLMClient:
         """
         Build a VLLMClient from environment variables.
 
         Env vars:
-          VLLM_MODE        = local | cloud | simulated   (default: simulated)
+          VLLM_MODE        = local | cloud | modal   (default: local)
           VLLM_LOCAL_URL    = http://localhost:8001/v1
           VLLM_CLOUD_URL    = https://your-pod.runpod.ai/v1
           VLLM_CLOUD_API_KEY = rp_xxx
           VLLM_MODEL        = override model name
-
-        Returns None if mode is 'simulated'.
         """
-        mode = os.getenv("VLLM_MODE", "simulated").lower()
-
-        if mode == "simulated":
-            logger.info("VLLM_MODE=simulated — running in keyword-based mode")
-            return None
+        mode = os.getenv("VLLM_MODE", "local").lower()
 
         if mode == "local":
             base_url = os.getenv("VLLM_LOCAL_URL", _DEFAULT_LOCAL_URL)
@@ -99,20 +93,17 @@ class VLLMClient:
             api_key = os.getenv("VLLM_CLOUD_API_KEY", "")
             model = os.getenv("VLLM_MODEL", _DEFAULT_CLOUD_MODEL)
             if not base_url:
-                logger.error("VLLM_MODE=cloud but VLLM_CLOUD_URL is not set")
-                return None
+                raise ValueError("VLLM_MODE=cloud requires VLLM_CLOUD_URL")
             logger.info("VLLM_MODE=cloud — connecting to %s model=%s", base_url, model)
 
         elif mode == "modal":
             if _injected_client is not None:
                 logger.info("VLLM_MODE=modal — using injected ModalVLLMClient (Modal RPC)")
                 return _injected_client
-            logger.warning("VLLM_MODE=modal but no client was injected — falling back to simulated")
-            return None
+            raise RuntimeError("VLLM_MODE=modal requires an injected ModalVLLMClient")
 
         else:
-            logger.warning("Unknown VLLM_MODE=%s — falling back to simulated", mode)
-            return None
+            raise ValueError("Unknown VLLM_MODE=%s. Choose local, cloud, or modal." % mode)
 
         return cls(base_url=base_url, api_key=api_key, model=model)
 

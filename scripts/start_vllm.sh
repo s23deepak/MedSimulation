@@ -4,7 +4,7 @@
 #
 # Requirements:
 #   - NVIDIA GPU with ≥8GB VRAM (tested on RTX 5060)
-#   - vLLM installed: pip install vllm
+#   - vLLM 0.16.x and bitsandbytes installed
 #   - HuggingFace access to google/medgemma-4b-it
 #
 # Usage:
@@ -16,13 +16,20 @@ set -euo pipefail
 
 MODEL="${VLLM_MODEL:-google/medgemma-4b-it}"
 PORT="${VLLM_PORT:-8001}"
-MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
+MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-1024}"
 GPU_UTIL="${VLLM_GPU_UTIL:-0.85}"
 QUANTIZATION="${VLLM_QUANTIZATION:-bitsandbytes}"
 VLLM_BIN="$(command -v vllm || true)"
+ZIG_CC="$(dirname "${VLLM_BIN}")/zig-cc"
 
 if [[ -z "${VLLM_BIN}" ]]; then
-    echo "vllm is not installed or not on PATH. Run: uv sync --extra gpu" >&2
+    cat >&2 <<'EOF'
+vllm is not installed or not on PATH.
+
+For the tested 8 GB local setup, install:
+  uv pip install --python .llm-venv/bin/python \
+    'vllm==0.16.0' 'bitsandbytes==0.49.2' 'ziglang==0.16.0'
+EOF
     exit 1
 fi
 
@@ -43,11 +50,16 @@ echo "╚═══════════════════════�
 
 ARGS=(
     serve "${MODEL}"
+    --host 127.0.0.1
     --port "${PORT}"
     --dtype bfloat16
     --max-model-len "${MAX_MODEL_LEN}"
     --gpu-memory-utilization "${GPU_UTIL}"
     --trust-remote-code
+    --enforce-eager
+    --max-num-seqs 1
+    --disable-log-stats
+    --limit-mm-per-prompt '{"image":0}'
 )
 
 case "${QUANTIZATION}" in
@@ -58,11 +70,8 @@ case "${QUANTIZATION}" in
             cat >&2 <<'EOF'
 bitsandbytes is required for VLLM_QUANTIZATION=bitsandbytes.
 
-Install GPU dependencies with:
-  uv sync --extra gpu
-
-Or install only the missing package with:
-  uv add --optional gpu 'bitsandbytes>=0.46.1'
+Install the tested local GPU dependency with:
+  uv pip install --python .llm-venv/bin/python 'bitsandbytes==0.49.2'
 
 Or disable quantization for this run:
   VLLM_QUANTIZATION=none bash scripts/start_vllm.sh
@@ -71,6 +80,7 @@ EOF
         fi
 
         ARGS+=(
+            --allow-deprecated-quantization
             --quantization bitsandbytes
             --load-format bitsandbytes
         )
@@ -80,5 +90,9 @@ EOF
         exit 1
         ;;
 esac
+
+if [[ -z "${CC:-}" && -x "${ZIG_CC}" ]]; then
+    export CC="${ZIG_CC}"
+fi
 
 exec "${VLLM_BIN}" "${ARGS[@]}" "$@"

@@ -88,6 +88,8 @@ def build_export_dict(session: "SimulationSession") -> dict:
     debrief = session.debrief or {}
 
     return {
+        "disclaimer": "Educational practice feedback only. Not an official competency assessment or medical advice.",
+        "feedback_type": "practice_feedback" if session.score else "unscored_practice",
         "meta": {
             "session_id": session.session_id,
             "resident_name": session.resident_name,
@@ -102,12 +104,17 @@ def build_export_dict(session: "SimulationSession") -> dict:
             "difficulty": case.difficulty,
             "source": getattr(case, "source", ""),
             "source_ref": getattr(case, "source_ref", ""),
+            "version": case.version,
+            "review_status": case.status,
+            "reviewer": case.reviewer,
+            "approved_at": case.approved_at,
             "presentation": case.presentation,
             "initial_vitals": case.initial_vitals,
             "learning_objectives": case.learning_objectives,
             "score_weights": getattr(case, "score_weights", {}),
         },
         "history": session.history_questions,
+        "clinical_notes": session.clinical_notes,
         "exam": exam,
         "investigations": investigations,
         "imaging": imaging,
@@ -118,9 +125,11 @@ def build_export_dict(session: "SimulationSession") -> dict:
             "correct_management": score.get("correct_management", []),
         },
         "scores": {
-            "total": score.get("total", 0),
+            "total": score.get("total"),
             "max_score": score.get("max_score", 100),
-            "percentage": score.get("percentage", 0),
+            "percentage": score.get("percentage"),
+            "rubric_version": score.get("rubric_version"),
+            "evidence": score.get("evidence", []),
             "grade": score.get("grade", ""),
             "domain_scores": score.get("domain_scores", {}),
             "domain_feedback": score.get("domain_feedback", {}),
@@ -199,7 +208,7 @@ def generate_pdf(data: dict) -> bytes:
     pdf.set_text_color(255, 255, 255)
     pdf.set_y(6)
     pdf.set_font("Helvetica", "B", 17)
-    pdf.cell(0, 9, f"{_BRAND} - Clinical Training Report", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 9, f"{_BRAND} - Practice Report", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 8)
     meta = data["meta"]
     pdf.cell(0, 5,
@@ -215,7 +224,7 @@ def generate_pdf(data: dict) -> bytes:
     pct = sc.get("percentage", 0)
     pdf.set_font("Helvetica", "B", 34)
     pdf.set_text_color(*_TEAL)
-    pdf.cell(0, 14, f"{pct:.0f}%", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 14, f"{pct:.0f}%" if pct is not None else "Unscored practice", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(*_MUTED)
     pdf.cell(0, 5,
@@ -224,6 +233,8 @@ def generate_pdf(data: dict) -> bytes:
     )
     pdf.set_text_color(*_DARK)
     pdf.ln(3)
+    body(data["disclaimer"])
+    body(f"Case version: {data['case']['version']}. Review: {data['case']['review_status']}. Reviewer: {data['case']['reviewer'] or 'Pending'}.")
 
     # ── Case overview ──────────────────────────────────────────────────────────
     section_header("Case Overview")
@@ -265,6 +276,10 @@ def generate_pdf(data: dict) -> bytes:
         pdf.ln(1)
 
     # ── Physical exam ──────────────────────────────────────────────────────────
+    if data.get("clinical_notes"):
+        section_header("Learner Notes")
+        body(data["clinical_notes"])
+
     section_header(f"Physical Examination  ({len(data['exam'])} systems)")
     for entry in data["exam"]:
         pdf.set_font("Helvetica", "B", 9)
@@ -402,4 +417,9 @@ def generate_pdf(data: dict) -> bytes:
             pdf.cell(6, 5, "-")
             pdf.multi_cell(pdf.epw - 6, 5, _safe(pt), new_x="LMARGIN", new_y="NEXT")
 
+    if sc.get("evidence"):
+        section_header("Rubric Evidence")
+        body(f"Rubric version: {sc.get('rubric_version')}")
+        for item in sc["evidence"]:
+            body(f"{item.get('item_id')}: {item.get('label', '')}. Credit: {item.get('credit', 0)}; penalty: {item.get('penalty', 0)}. Evidence: {'; '.join(item.get('evidence', []))}")
     return bytes(pdf.output())

@@ -1,8 +1,8 @@
 [project]
 name = "medsimulation"
 version = "0.1.0"
-description = "AI-powered clinical simulation engine for resident training and competency assessment"
-readme = "SIMULATION_PROJECT.md"
+description = "Clinical reasoning practice with reviewed cases and traceable educational feedback"
+readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi>=0.128.4",
@@ -18,6 +18,8 @@ dependencies = [
     "beautifulsoup4>=4.12.3",
     "fpdf2>=2.7.9",
     "modal>=1.4.2",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -38,4 +40,19 @@ testpaths = ["tests"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ruff>=0.12",
+    "mypy>=1.15",
+    "playwright>=1.50",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.mypy]
+ignore_missing_imports = true
+follow_imports = "skip"
+files = ["src/web/config.py", "src/web/models.py", "src/simulation/safety.py"]

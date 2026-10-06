@@ -37,6 +37,12 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 
 logger = logging.getLogger(__name__)
 
+# Keep local vLLM prompts under the tested 1024-token context window.
+# This is intentionally conservative because we do not want to depend on the
+# model tokenizer in the FastAPI process.
+_MAX_PRIOR_HISTORY_MESSAGES = 4
+_MAX_PATIENT_RESPONSE_TOKENS = 128
+
 # ── Per-session history store ─────────────────────────────────────────────────
 
 _store: dict[str, InMemoryChatMessageHistory] = {}
@@ -133,6 +139,26 @@ class MedGemmaRunnable(Runnable):
         """Format text for MedGemma/Gemma chat templates."""
         return [{"type": "text", "text": str(content)}]
 
+    @staticmethod
+    def _trim_messages_for_local_context(messages: list[BaseMessage]) -> list[BaseMessage]:
+        """
+        Keep the system prompt and the latest few dialogue turns.
+
+        The full session transcript is still stored on the SimulationSession for
+        scoring/debrief. This only trims the inference prompt sent to the local
+        1024-token vLLM server.
+        """
+        if len(messages) <= _MAX_PRIOR_HISTORY_MESSAGES + 2:
+            return messages
+
+        system_messages = [msg for msg in messages if msg.type == "system"]
+        non_system_messages = [msg for msg in messages if msg.type != "system"]
+        keep_count = _MAX_PRIOR_HISTORY_MESSAGES + 1  # prior turns + current question
+        trimmed = non_system_messages[-keep_count:]
+        while trimmed and trimmed[0].type != "human":
+            trimmed = trimmed[1:]
+        return system_messages[:1] + trimmed
+
     def invoke(
         self,
         input: PromptValue | list[BaseMessage],
@@ -143,6 +169,7 @@ class MedGemmaRunnable(Runnable):
         messages: list[BaseMessage] = (
             input.to_messages() if isinstance(input, PromptValue) else input
         )
+        messages = self._trim_messages_for_local_context(messages)
         try:
             if hasattr(self.agent, "sync_chat_messages"):
                 # VLLMClient path: send proper role-separated messages so the
@@ -166,12 +193,16 @@ class MedGemmaRunnable(Runnable):
                             "content": self._text_content_parts(msg.content),
                         })
                 text = self.agent.sync_chat_messages(
-                    oai_messages, temperature=0.7, max_tokens=256
+                    oai_messages,
+                    temperature=0.7,
+                    max_tokens=_MAX_PATIENT_RESPONSE_TOKENS,
                 )
             elif hasattr(self.agent, "generate_medgemma"):
                 flat_prompt = self._flatten(messages)
                 text = self.agent.generate_medgemma(
-                    flat_prompt, temperature=0.3, max_tokens=256
+                    flat_prompt,
+                    temperature=0.3,
+                    max_tokens=_MAX_PATIENT_RESPONSE_TOKENS,
                 )
             elif hasattr(self.agent, "chat"):
                 flat_prompt = self._flatten(messages)
@@ -181,7 +212,7 @@ class MedGemmaRunnable(Runnable):
                 text = "I'm sorry, I don't quite understand. Could you ask that differently?"
         except Exception as exc:
             logger.warning("MedGemmaRunnable inference failed: %s", exc)
-            text = "I'm not feeling well enough to answer right now."
+            raise RuntimeError("Patient response model failed") from exc
 
         return AIMessage(content=text)
 

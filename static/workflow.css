@@ -1,0 +1,75 @@
+* { letter-spacing: 0 !important; }
+[hidden] { display: none !important; }
+.account-dialog { width: min(420px, calc(100% - 32px)); border: 1px solid #d5dedb; border-radius: 8px; padding: 28px; color: #20312d; }
+.account-dialog::backdrop { background: #18221fb3; }
+.account-dialog form, .review-form { display: grid; gap: 16px; }
+.account-dialog input, .review-form textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #aabbb4; border-radius: 4px; }
+.account-dialog label { display: grid; gap: 6px; }
+.account-dialog button, .review-actions button { min-height: 40px; padding: 8px 16px; border: 1px solid #7b9389; border-radius: 4px; background: #edf4f0; color: #193a2f; cursor: pointer; }
+.practice-notice { color: #674a0e; background: #fff5d8; padding: 12px 16px; margin: 12px 0; border-left: 3px solid #b98215; overflow-wrap: anywhere; }
+.review-layout { max-width: 1180px; padding: 24px; margin: auto; display: grid; gap: 24px; grid-template-columns: 260px minmax(0, 1fr); }
+.review-layout h1 { font-size: 24px; margin-bottom: 20px; }
+.review-queue button { text-align: left; width: 100%; padding: 14px 8px; border: 0; border-bottom: 1px solid #cdd9d3; background: transparent; cursor: pointer; overflow-wrap: anywhere; }
+.review-queue button[aria-current="true"] { background: #e1efe8; }
+.review-form textarea { font: 13px/1.5 monospace; min-height: 220px; resize: vertical; }
+.review-form textarea[name="notes"] { min-height: 80px; font-family: inherit; }
+.review-form fieldset { border: 0; border-bottom: 1px solid #cdd9d3; padding: 16px 0; display: grid; gap: 8px; min-width: 0; }
+.review-form label { display: grid; gap: 6px; overflow-wrap: anywhere; }
+.review-form input, .review-form select { max-width: 100%; min-width: 0; padding: 8px; border: 1px solid #aabbb4; border-radius: 4px; }
+.review-form input[type="checkbox"] { justify-self: start; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+#rubricItems { max-width: 100%; overflow-x: auto; }
+.rubric-row { display: grid; grid-template-columns: 135px minmax(160px, 1.5fr) 105px 58px minmax(140px, 1.2fr) minmax(110px, 1fr) 32px; gap: 6px; min-width: 800px; align-items: center; padding: 5px 0; border-bottom: 1px solid #e3e9e5; }
+.rubric-row label { display: block; min-width: 0; }
+.rubric-row input, .rubric-row select { width: 100%; box-sizing: border-box; font-size: 12px; padding: 6px; }
+.rubric-row button { padding: 5px; min-height: 30px; }
+.rubric-heading { font-size: 11px; text-transform: uppercase; color: #50655c; }
+.review-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.evidence-list { padding: 12px 0; }
+.evidence-list article { padding: 10px 0; border-bottom: 1px solid #d5dedb; overflow-wrap: anywhere; }
+.msg-label time { font-weight: 400; font-size: 11px; margin-left: 8px; }
+.msg-bubble, .result-value, .case-card, .simCitation, .ai-feedback-text { overflow-wrap: anywhere; }
+.chat-messages { overscroll-behavior: contain; }
+.nav-right { flex-wrap: wrap; }
+.sim-topbar-right { flex-wrap: wrap; }
+.resume-section { border-top: 1px solid #cbd9d2; border-bottom: 1px solid #cbd9d2; padding: 10px 0; margin-bottom: 12px; }
+.resume-section h2 { font-size: 15px; margin: 0 0 8px; }
+.resume-section #resumeList > div { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.resume-section button { border: 1px solid #a9bdb2; background: #fff; border-radius: 4px; padding: 8px 10px; cursor: pointer; }
+.system-btn, .quick-inv-btn, .case-start-btn { white-space: normal; }
+.dashboard-brief { grid-template-columns: 1fr auto; align-items: center; margin-bottom: 10px; gap: 16px; }
+.dashboard-brief > div:first-child { min-height: 0; padding: 0; border: 0; background: none; }
+.dashboard-brief h1 { font-size: 24px; line-height: 1.2; margin: 0 0 4px; }
+.dashboard-brief p { margin: 0; font-size: 13px; line-height: 1.4; }
+.dashboard-brief .readiness-grid { display: flex; gap: 8px; border: 0; background: transparent; }
+.dashboard-brief .readiness-card { min-width: 105px; padding: 7px 10px; }
+.case-generator, .practice-note, .case-library-shell { border-radius: 4px; }
+.case-generator { padding: 16px; }
+.case-library-shell { padding: 16px; }
+.case-card { border-radius: 4px; }
+.case-card h3 { font-size: 15px; }
+.library-toolbar { display: none; }
+.sim-topbar { position: relative; top: 0; backdrop-filter: none; }
+.sim-topbar h2, #simTitle { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.app-header { position: relative; top: 0; }
+@media (max-width: 1100px) {
+    .sim-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "chart orders" "conversation notes"; }
+    .sim-layout > * { min-width: 0; }
+}
+@media (max-width: 700px) {
+    .sim-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "chart" "conversation" "orders" "notes"; }
+    .tab-bar { display: flex; overflow-x: auto; white-space: nowrap; }
+    .tab-btn { flex: 0 0 auto; }
+    .conversation-column .panel-body { min-height: 360px; }
+    .chat-messages { min-height: 160px; max-height: 260px; }
+    .submit-section, .submit-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+    .dashboard-brief { grid-template-columns: 1fr; }
+    .dashboard-brief .readiness-grid { display: none; }
+    .review-layout { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+    .header-inner, .sim-topbar, .dashboard-brief { flex-wrap: wrap; }
+    .sim-topbar-right { width: 100%; }
+    .sim-topbar-right button { flex: 1; }
+    .nav-user { display: none; }
+}

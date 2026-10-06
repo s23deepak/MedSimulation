@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SimuMed Clinical - Clinical Reasoning Practice</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&amp;family=Geist:wght@600&amp;family=JetBrains+Mono:wght@500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+    </style>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "surface-variant": "#dfe3e7",
+                "surface-container-highest": "#dfe3e7",
+                "tertiary-container": "#8b4b32",
+                "secondary-fixed": "#d5e3fc",
+                "primary-fixed-dim": "#85d5c9",
+                "on-secondary-container": "#556379",
+                "surface": "#f6fafe",
+                "clinical-pending": "#D97706",
+                "secondary-container": "#d2e1fa",
+                "primary-fixed": "#a1f1e5",
+                "surface-container": "#eaeef2",
+                "secondary-fixed-dim": "#b9c7e0",
+                "background": "#f6fafe",
+                "on-tertiary": "#ffffff",
+                "on-tertiary-fixed": "#380d00",
+                "on-secondary-fixed": "#0d1c2e",
+                "background-clean": "#F8FAFC",
+                "inverse-on-surface": "#edf1f5",
+                "surface-container-lowest": "#ffffff",
+                "on-tertiary-container": "#ffc9b7",
+                "on-primary-fixed": "#00201d",
+                "inverse-primary": "#85d5c9",
+                "on-primary-container": "#93e4d8",
+                "clinical-success": "#059669",
+                "surface-dim": "#d6dade",
+                "border-subtle": "#E2E8F0",
+                "on-tertiary-fixed-variant": "#71361f",
+                "tertiary-fixed-dim": "#ffb59a",
+                "error-container": "#ffdad6",
+                "error": "#ba1a1a",
+                "on-surface": "#171c1f",
+                "secondary": "#515f74",
+                "on-error": "#ffffff",
+                "on-surface-variant": "#3e4947",
+                "surface-container-low": "#f0f4f8",
+                "on-error-container": "#93000a",
+                "on-primary": "#ffffff",
+                "inverse-surface": "#2c3134",
+                "surface-tint": "#066a61",
+                "outline-variant": "#bec9c6",
+                "tertiary-fixed": "#ffdbcf",
+                "clinical-abnormal": "#BE123C",
+                "tertiary": "#6e341d",
+                "on-secondary-fixed-variant": "#3a485c",
+                "primary": "#004e47",
+                "primary-container": "#00685f",
+                "on-primary-fixed-variant": "#005049",
+                "outline": "#6e7977",
+                "on-secondary": "#ffffff",
+                "surface-container-high": "#e4e9ed",
+                "surface-bright": "#f6fafe",
+                "on-background": "#171c1f"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "max-width": "1440px",
+                "panel-padding": "20px",
+                "gutter": "16px",
+                "margin-edge": "24px",
+                "unit": "4px"
+        },
+        "fontFamily": {
+                "headline-lg-mobile": [
+                        "Geist"
+                ],
+                "data-tabular": [
+                        "JetBrains Mono"
+                ],
+                "label-caps": [
+                        "Inter"
+                ],
+                "headline-md": [
+                        "Geist"
+                ],
+                "headline-lg": [
+                        "Geist"
+                ],
+                "body-md": [
+                        "Inter"
+                ],
+                "body-sm": [
+                        "Inter"
+                ]
+        },
+        "fontSize": {
+                "headline-lg-mobile": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "data-tabular": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "500"
+                        }
+                ],
+                "label-caps": [
+                        "11px",
+                        {
+                                "lineHeight": "16px",
+                                "letterSpacing": "0.05em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "headline-md": [
+                        "20px",
+                        {
+                                "lineHeight": "28px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "headline-lg": [
+                        "30px",
+                        {
+                                "lineHeight": "36px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "body-sm": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "400"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col selection:bg-primary selection:text-on-primary">
+<!-- TopNavBar component generated from JSON -->
+<header class="bg-surface-container-lowest dark:bg-surface-container-low w-full top-0 sticky border-b border-border-subtle dark:border-outline-variant flat no shadows transition-all duration-200 ease-in-out z-50">
+<div class="flex justify-between items-center h-16 px-gutter max-w-max-width mx-auto">
+<div class="text-headline-md font-headline-md text-primary dark:text-primary-fixed">
+                SimuMed Clinical
+            </div>
+<nav class="hidden md:flex space-x-8">
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors font-body-md text-body-md px-2 py-1" href="#">Curriculum</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors font-body-md text-body-md px-2 py-1" href="#">Simulations</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors font-body-md text-body-md px-2 py-1" href="#">Analytics</a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed transition-colors font-body-md text-body-md px-2 py-1" href="#">Resources</a>
+</nav>
+<div class="flex items-center space-x-4">
+<button class="hidden md:block text-secondary hover:text-primary font-body-md text-body-md px-4 py-2 rounded-lg hover:bg-surface-container transition-all duration-200 ease-in-out active:scale-95">Support</button>
+<button class="bg-primary text-on-primary font-body-md text-body-md px-4 py-2 rounded-lg hover:bg-primary-container transition-all duration-200 ease-in-out active:scale-95 border-none shadow-sm">Launch Portal</button>
+</div>
+</div>
+</header>
+<main class="flex-grow">
+<!-- Hero Section -->
+<section class="py-20 px-gutter max-w-max-width mx-auto flex flex-col items-center text-center">
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-6 max-w-3xl">
+                Clinical Reasoning Practice for the Next Generation of Clinicians
+            </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl mb-10">
+                Advanced AI-driven patient simulations designed to rigorously test and refine diagnostic skills, formulate management plans, and improve clinical judgment in a risk-free environment for medical students and residents.
+            </p>
+<div class="flex flex-col sm:flex-row gap-4 mb-12">
+<button class="bg-primary text-on-primary px-8 py-3 rounded-lg font-body-md text-body-md shadow-sm hover:bg-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">Start Simulation</button>
+<button class="bg-transparent text-primary border border-primary px-8 py-3 rounded-lg font-body-md text-body-md hover:bg-surface-container transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">Browse Case Library</button>
+</div>
+<div class="w-full max-w-5xl mx-auto rounded-xl overflow-hidden shadow-lg border border-border-subtle bg-surface-container-lowest">
+<img alt="SimuMed Platform Preview" class="w-full h-auto object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCAtnnqZjJUvJ31-tjGIFOXiKKWBlF5Qmm2EJHId3UkhuwSRpVft2xU-ezI5cjiaYvXmu-d35EKJF5I2KiGRMIwIuGaTONGucNiAYYM9tgqdrUsnjVWR0LyhE2GFUItf_lxtY876E4t1N8BuaxTkWBaFvufTt-76-4ijvb4igupd_i3S3UlIoZ68EOf7bm4_z_R10OzRpV-VuGYaXSPLEHJPi2BXrXNxczPGZgy6YFsq9Mu5S77y8Wa"/>
+</div>
+</section>
+<!-- Core Capabilities - Bento Grid -->
+<section class="py-16 px-gutter bg-background-clean border-t border-b border-border-subtle">
+<div class="max-w-max-width mx-auto">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-10 text-center">Core Capabilities</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Feature 1 -->
+<div class="bg-surface-container-lowest rounded-xl border border-border-subtle p-6 md:col-span-2 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start gap-4">
+<div class="bg-surface-container-low p-3 rounded-lg text-primary">
+<span class="material-symbols-outlined" data-icon="forum">forum</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface mb-2">AI Patient Interaction</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Conduct realistic clinical interviews using natural language. The AI engine dynamically responds based on complex physiological models and hidden diagnostic variables.</p>
+</div>
+</div>
+</div>
+<!-- Feature 2 -->
+<div class="bg-surface-container-lowest rounded-xl border border-border-subtle p-6 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start gap-4">
+<div class="bg-surface-container-low p-3 rounded-lg text-primary">
+<span class="material-symbols-outlined" data-icon="stethoscope">stethoscope</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface mb-2">Dynamic Exam Findings</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Perform targeted physical exams with simulated clinical signs.</p>
+</div>
+</div>
+</div>
+<!-- Feature 3 -->
+<div class="bg-surface-container-lowest rounded-xl border border-border-subtle p-6 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start gap-4">
+<div class="bg-surface-container-low p-3 rounded-lg text-primary">
+<span class="material-symbols-outlined" data-icon="science">science</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface mb-2">Investigation &amp; Imaging</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Order labs and imaging. Review realistic results.</p>
+</div>
+</div>
+</div>
+<!-- Feature 4 -->
+<div class="bg-surface-container-lowest rounded-xl border border-border-subtle p-6 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start gap-4">
+<div class="bg-surface-container-low p-3 rounded-lg text-primary">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface mb-2">Structured Domain Scoring</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Objective evaluation across ACGME core competencies.</p>
+</div>
+</div>
+</div>
+<!-- Feature 5 -->
+<div class="bg-surface-container-lowest rounded-xl border border-border-subtle p-6 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start gap-4">
+<div class="bg-surface-container-low p-3 rounded-lg text-primary">
+<span class="material-symbols-outlined" data-icon="picture_as_pdf">picture_as_pdf</span>
+</div>
+<div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface mb-2">PDF Debrief Export</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Generate detailed reports for clinical portfolios.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- How it Works -->
+<section class="py-16 px-gutter max-w-max-width mx-auto bg-surface">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-12 text-center">Simulation Workflow</h2>
+<div class="flex flex-col md:flex-row justify-between items-start relative">
+<!-- Line connecting steps (desktop) -->
+<div class="hidden md:block absolute top-6 left-12 right-12 h-px bg-border-subtle z-0"></div>
+<!-- Step 1 -->
+<div class="relative z-10 flex flex-col items-center text-center w-full md:w-1/5 mb-8 md:mb-0">
+<div class="w-12 h-12 bg-surface-container-lowest border-2 border-primary rounded-full flex items-center justify-center text-primary font-headline-md text-headline-md mb-4 shadow-sm">1</div>
+<span class="material-symbols-outlined text-primary mb-2" data-icon="library_books">library_books</span>
+<h3 class="font-body-md text-body-md font-medium text-on-surface">Choose Case</h3>
+</div>
+<!-- Step 2 -->
+<div class="relative z-10 flex flex-col items-center text-center w-full md:w-1/5 mb-8 md:mb-0">
+<div class="w-12 h-12 bg-surface-container-lowest border-2 border-border-subtle rounded-full flex items-center justify-center text-secondary font-headline-md text-headline-md mb-4 bg-surface shadow-sm">2</div>
+<span class="material-symbols-outlined text-secondary mb-2" data-icon="clinical_notes">clinical_notes</span>
+<h3 class="font-body-md text-body-md font-medium text-on-surface">Interview</h3>
+</div>
+<!-- Step 3 -->
+<div class="relative z-10 flex flex-col items-center text-center w-full md:w-1/5 mb-8 md:mb-0">
+<div class="w-12 h-12 bg-surface-container-lowest border-2 border-border-subtle rounded-full flex items-center justify-center text-secondary font-headline-md text-headline-md mb-4 bg-surface shadow-sm">3</div>
+<span class="material-symbols-outlined text-secondary mb-2" data-icon="biotech">biotech</span>
+<h3 class="font-body-md text-body-md font-medium text-on-surface">Order Tests</h3>
+</div>
+<!-- Step 4 -->
+<div class="relative z-10 flex flex-col items-center text-center w-full md:w-1/5 mb-8 md:mb-0">
+<div class="w-12 h-12 bg-surface-container-lowest border-2 border-border-subtle rounded-full flex items-center justify-center text-secondary font-headline-md text-headline-md mb-4 bg-surface shadow-sm">4</div>
+<span class="material-symbols-outlined text-secondary mb-2" data-icon="assignment">assignment</span>
+<h3 class="font-body-md text-body-md font-medium text-on-surface">Submit Plan</h3>
+</div>
+<!-- Step 5 -->
+<div class="relative z-10 flex flex-col items-center text-center w-full md:w-1/5">
+<div class="w-12 h-12 bg-surface-container-lowest border-2 border-border-subtle rounded-full flex items-center justify-center text-secondary font-headline-md text-headline-md mb-4 bg-surface shadow-sm">5</div>
+<span class="material-symbols-outlined text-secondary mb-2" data-icon="fact_check">fact_check</span>
+<h3 class="font-body-md text-body-md font-medium text-on-surface">Review Feedback</h3>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer component generated from JSON -->
+<footer class="bg-surface-container-lowest dark:bg-surface-dim border-t border-border-subtle dark:border-outline-variant w-full mt-auto py-8 px-gutter">
+<div class="max-w-max-width mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+<div class="flex flex-col gap-2 text-center md:text-left">
+<div class="font-label-caps text-label-caps text-secondary">
+                    SIMUMED CLINICAL
+                </div>
+<div class="font-body-sm text-body-sm text-on-surface-variant dark:text-on-surface">
+                    © 2024 SimuMed Professional. Clinical Training Environment.
+                </div>
+<div class="font-body-sm text-body-sm text-secondary text-xs mt-2">
+<strong>Important:</strong> SimuMed is an educational tool designed exclusively for clinical reasoning practice and academic simulation. It is not intended for real-world clinical diagnosis, treatment planning, or medical advice.
+                </div>
+</div>
+<nav class="flex flex-wrap justify-center gap-6">
+<a class="font-body-sm text-body-sm text-secondary hover:text-primary transition-colors duration-200" href="#">Privacy Policy</a>
+<a class="font-body-sm text-body-sm text-secondary hover:text-primary transition-colors duration-200" href="#">Terms of Service</a>
+<a class="font-body-sm text-body-sm text-secondary hover:text-primary transition-colors duration-200" href="#">Institutional Licensing</a>
+</nav>
+</div>
+</footer>
+</body></html>

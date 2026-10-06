@@ -68,6 +68,8 @@ image = (
         "beautifulsoup4>=4.12.3",
         "fpdf2>=2.7.9",
         "langchain-core>=0.3.0",
+        "sqlalchemy>=2.0",
+        "psycopg[binary]>=3.2",
         # vLLM and GPU dependencies
         "vllm>=0.6.0",
         "bitsandbytes>=0.46.1",
@@ -94,7 +96,6 @@ image = (
     .add_local_dir("templates", remote_path="/root/templates")
     .add_local_dir("static", remote_path="/root/static")
     .add_local_file("main.py", remote_path="/root/main.py")
-    .add_local_file("data/medsim.db", remote_path="/root/seed_medsim.db")
 )
 
 # ── One-time Model Download ──────────────────────────────────────────────────────
@@ -420,6 +421,9 @@ def serve():
     # ── Set env vars before any src imports ────────────────────────────────────
     os.environ["VLLM_MODE"] = "modal"
     os.environ["VLLM_MODEL"] = os.getenv("VLLM_MODEL", "google/medgemma-4b-it")
+    os.environ["APP_ENV"] = "production"
+    if not os.getenv("DATABASE_URL"):
+        raise RuntimeError("Modal hosting requires DATABASE_URL pointing to Postgres")
     # Use the correct env var name and correct filename
     os.environ["DATABASE_PATH"] = "/data/medsim.db"
     os.environ["DATA_DIR"] = "/data"
@@ -433,14 +437,6 @@ def serve():
     (app_dir / "data").mkdir(exist_ok=True)
     (app_dir / "data" / "imaging").mkdir(exist_ok=True)
     (app_dir / "data" / "imaging" / "dicom").mkdir(exist_ok=True)
-
-    # ── Seed DB from image if volume is empty ──────────────────────────────────
-    import shutil
-    vol_db = Path("/data/medsim.db")
-    seed_db = Path("/root/seed_medsim.db")
-    if (not vol_db.exists() or vol_db.stat().st_size == 0) and seed_db.exists() and seed_db.stat().st_size > 0:
-        shutil.copy2(str(seed_db), str(vol_db))
-        logger.info("Seeded production DB from image (%d bytes)", vol_db.stat().st_size)
 
     # ── Inject Modal-native vLLM client ────────────────────────────────────────
     # This must happen BEFORE importing main so from_env() sees the injected client.
@@ -481,7 +477,13 @@ image_cpu = (
         "beautifulsoup4>=4.12.3",
         "fpdf2>=2.7.9",
         "langchain-core>=0.3.0",
+        "sqlalchemy>=2.0",
+        "psycopg[binary]>=3.2",
     )
+    .add_local_dir("src", remote_path="/root/src")
+    .add_local_dir("templates", remote_path="/root/templates")
+    .add_local_dir("static", remote_path="/root/static")
+    .add_local_file("main.py", remote_path="/root/main.py")
 )
 
 
@@ -522,6 +524,9 @@ def serve_cpu():
 
     os.environ["VLLM_MODE"] = vllm_mode
     os.environ["DATA_DIR"] = "/data"
+    os.environ["APP_ENV"] = "production"
+    if not os.getenv("DATABASE_URL"):
+        raise RuntimeError("Modal hosting requires DATABASE_URL pointing to Postgres")
 
     app_dir = Path(__file__).parent
     if str(app_dir) not in sys.path:

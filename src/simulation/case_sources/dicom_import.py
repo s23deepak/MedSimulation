@@ -38,6 +38,15 @@ def process_dicom_zip(zip_path: Path) -> ClinicalCase:
         tmp_path = Path(tmp_dir)
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
+                members = zf.infolist()
+                if len(members) > 1000 or sum(m.file_size for m in members) > 200 * 1024 * 1024:
+                    raise ValueError("DICOM archive exceeds extraction limits")
+                for member in members:
+                    target = (tmp_path / member.filename).resolve()
+                    if not target.is_relative_to(tmp_path.resolve()) or "\\" in member.filename or (member.external_attr >> 16) & 0o170000 == 0o120000:
+                        raise ValueError("Unsafe archive member")
+                    if member.file_size > 40 * 1024 * 1024 or member.flag_bits & 1:
+                        raise ValueError("Unsupported archive member")
                 zf.extractall(tmp_path)
         except zipfile.BadZipFile:
             raise ValueError("Uploaded file is not a valid ZIP archive.")
@@ -72,6 +81,10 @@ def process_dicom_zip(zip_path: Path) -> ClinicalCase:
         # Keep original structure within the case folder
         copied_files = []
         for f in dcm_files:
+            try:
+                pydicom.dcmread(f, stop_before_pixels=True)
+            except pydicom.errors.InvalidDicomError as exc:
+                raise ValueError("All archive images must be valid DICOM") from exc
             rel_path = f.relative_to(tmp_path)
             target = dicom_dest / rel_path
             target.parent.mkdir(parents=True, exist_ok=True)
