@@ -425,6 +425,7 @@ def serve():
     # Temporary pilot path: use SQLite on the Modal persistent volume until a
     # managed Postgres provider is configured.
     os.environ["ALLOW_HOSTED_SQLITE"] = "1"
+    os.environ.pop("DATABASE_URL", None)
     os.environ["DATABASE_PATH"] = "/data/medsim.db"
     os.environ["DATA_DIR"] = "/data"
 
