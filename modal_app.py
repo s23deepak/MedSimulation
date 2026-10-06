@@ -323,7 +323,7 @@ class VLLMService:
             "prompt": prompt,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "stop": ["USER:", "RESIDENT:", "DOCTOR:", "PATIENT:", "ASSISTANT:"],
+            "stop": ["USER:", "RESIDENT:", "DOCTOR:", "PATIENT:"],
             "repetition_penalty": 1.1,
         }
         async with aiohttp.ClientSession() as session:
@@ -354,7 +354,7 @@ class VLLMService:
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "stop": ["USER:", "RESIDENT:", "DOCTOR:", "PATIENT:", "ASSISTANT:"],
+            "stop": ["USER:", "RESIDENT:", "DOCTOR:", "PATIENT:"],
             "repetition_penalty": 1.1,
         }
         async with aiohttp.ClientSession() as session:

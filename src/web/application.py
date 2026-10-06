@@ -99,6 +99,9 @@ def create_app(settings=None, agent=None, initialize_agent=True):
     templates = Jinja2Templates(directory=ROOT / "templates")
 
     @app.get("/", include_in_schema=False)
+    def home(request: Request):
+        return templates.TemplateResponse(request, "home.html")
+
     @app.get("/simulation", include_in_schema=False)
     def workspace(request: Request):
         return templates.TemplateResponse(

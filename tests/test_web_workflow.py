@@ -14,6 +14,19 @@ from src.web.config import Settings
 from conftest import login, complete
 
 
+def test_public_home_and_simulation_routes(tmp_path, monkeypatch):
+    monkeypatch.delenv('DATABASE_URL', raising=False)
+    monkeypatch.setattr(database, '_DB_PATH', str(tmp_path / 'home.db'))
+    with TestClient(create_app(settings=Settings(environment='local'), initialize_agent=False)) as client:
+        home = client.get('/')
+        assert home.status_code == 200
+        assert 'AI Patient Simulation Lab' in home.text
+        assert 'id="vllmLoading"' not in home.text
+        simulation = client.get('/simulation')
+        assert simulation.status_code == 200
+        assert 'id="vllmLoading"' in simulation.text
+
+
 def test_pilot_mode_without_password(tmp_path, monkeypatch):
     monkeypatch.delenv('DATABASE_URL', raising=False)
     monkeypatch.setattr(database, '_DB_PATH', str(tmp_path / 'guest.db'))
