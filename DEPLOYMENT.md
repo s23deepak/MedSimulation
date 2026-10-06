@@ -4,9 +4,10 @@ For the temporary resident pilot, the app runs without built-in accounts or
 passwords. Anyone with the link can open the app as the shared `pilot-learner`
 identity. Use synthetic cases only and do not enter identifiable patient
 information. Reviewer actions are unavailable until third-party auth is added,
-and cases without clinical review remain unscored. Hosted deployments require
-`APP_ENV=demo` or `production`, an explicit HTTPS `ALLOWED_ORIGINS`, and a
-Postgres `DATABASE_URL`. Startup refuses to run without these hosted values.
+and cases without clinical review remain unscored. The current Modal deployment
+uses SQLite on a persistent Modal volume via `ALLOW_HOSTED_SQLITE=1`; managed
+Postgres remains the production enhancement for reliable hosted and
+multi-container behavior.
 See [the current workflow](docs/WORKFLOW.md) for case review rules.
 
 Patient conversation and case generation require a configured LLM backend.
@@ -108,11 +109,13 @@ Required variables:
 | `VLLM_MODEL` | Served model name |
 | `PORT` | Web server port |
 | `APP_ENV=demo` | Hosted pilot mode |
-| `DATABASE_URL` | Persistent Postgres database |
+| `ALLOW_HOSTED_SQLITE=1` | Temporary Modal SQLite pilot mode |
+| `DATABASE_PATH=/data/medsim.db` | SQLite file on the Modal persistent volume |
 | `ALLOWED_ORIGINS` | Exact HTTPS app origin |
 
-Use managed Postgres for sessions and review metadata. Mount persistent storage
-for imaging at `/app/data`; do not ship the development SQLite database.
+Use managed Postgres for sessions and review metadata before production or
+multi-user pilots. Mount persistent storage for imaging at `/app/data`; do not
+ship the development SQLite database.
 
 ## Post-Deployment Checks
 
@@ -141,5 +144,5 @@ extra because local mode starts vLLM in the container.
 
 ### Database resets on redeploy
 
-Confirm `DATABASE_URL` points to persistent Postgres and imaging storage is
-mounted at `/app/data`.
+Confirm the Modal data volume is mounted and `DATABASE_PATH` points at that
+volume. For production, migrate to managed Postgres with `DATABASE_URL`.

@@ -52,6 +52,11 @@ def test_no_builtin_auth_routes(tmp_path, monkeypatch):
 def test_hosted_pilot_configuration(monkeypatch):
     monkeypatch.setenv('DATABASE_URL', 'postgresql+psycopg://example.invalid/medsim')
     Settings(environment='demo', allowed_origins=['https://pilot.example']).validate()
+    monkeypatch.delenv('DATABASE_URL', raising=False)
+    monkeypatch.setenv('ALLOW_HOSTED_SQLITE', '1')
+    Settings(environment='demo', allowed_origins=['https://pilot.example']).validate()
+    monkeypatch.delenv('ALLOW_HOSTED_SQLITE', raising=False)
+    monkeypatch.setenv('ALLOW_HOSTED_SQLITE', '1')
     with pytest.raises(ValueError, match='HTTPS'):
         Settings(environment='demo', allowed_origins=['http://pilot.example']).validate()
 

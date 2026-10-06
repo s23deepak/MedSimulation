@@ -14,7 +14,7 @@ MedSimulation provides a dynamic AI clinical practice environment where learners
 - **Practice Feedback:** Human-reviewed cases use a versioned five-domain rubric for traceable numeric feedback. Unreviewed cases remain available for unscored practice.
 
 ### 📚 Dynamic Case Pipeline
-Generated and imported cases are stored as pending until a future third-party-auth-protected review workflow approves them for numeric practice scores. Local development uses SQLite; hosted deployments require Postgres.
+Generated and imported cases are stored as pending until a future third-party-auth-protected review workflow approves them for numeric practice scores. Local development and the temporary Modal pilot use SQLite; managed Postgres is the production enhancement for reliable hosted and multi-container behavior.
 - **PubMed Integration:** Fetches and parses clinical case xml from NCBI databases.
 - **Wiley Clinical Case Reports:** Imports real-world open-access case reports.
 - **EndlessMedical API:** Integrates programmatic diagnostic challenges.

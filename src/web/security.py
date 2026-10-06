@@ -33,8 +33,9 @@ def current_user(request: Request):
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         origin = request.headers.get("origin")
         allowed = request.app.state.settings.allowed_origins
+        same_origin = f"{request.url.scheme}://{request.url.netloc}"
         if request.headers.get("sec-fetch-site") == "cross-site" or (
-            origin and origin not in allowed
+            origin and origin not in allowed and origin != same_origin
         ):
             raise HTTPException(403, "Request origin not allowed")
     user = dict(PILOT_USER)

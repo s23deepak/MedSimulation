@@ -422,9 +422,9 @@ def serve():
     os.environ["VLLM_MODE"] = "modal"
     os.environ["VLLM_MODEL"] = os.getenv("VLLM_MODEL", "google/medgemma-4b-it")
     os.environ["APP_ENV"] = "production"
-    if not os.getenv("DATABASE_URL"):
-        raise RuntimeError("Modal hosting requires DATABASE_URL pointing to Postgres")
-    # Use the correct env var name and correct filename
+    # Temporary pilot path: use SQLite on the Modal persistent volume until a
+    # managed Postgres provider is configured.
+    os.environ["ALLOW_HOSTED_SQLITE"] = "1"
     os.environ["DATABASE_PATH"] = "/data/medsim.db"
     os.environ["DATA_DIR"] = "/data"
 
