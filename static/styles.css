@@ -4215,7 +4215,7 @@ body {
     max-height: 86px;
     padding-top: 10px;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior: none;
 }
 
 .quick-questions button,
@@ -5384,4 +5384,68 @@ body {
         margin-top: -18px;
         padding: 20px;
     }
+}
+
+/* Keep the conversation and its composer within the visible work area. */
+.conversation-column .panel {
+    display: flex;
+    flex-direction: column;
+    height: var(--chat-panel-height, 680px);
+}
+
+.conversation-column .panel-body {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+}
+
+.chat-transcript {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #f6faf8;
+    overflow: hidden;
+}
+
+.chat-transcript .chat-messages {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    padding: 12px;
+    border: 0;
+    border-radius: 0;
+    overflow-y: auto;
+    scrollbar-gutter: auto;
+    scrollbar-width: none;
+    scroll-behavior: auto;
+}
+
+.chat-transcript .chat-messages::-webkit-scrollbar {
+    display: none;
+}
+
+.chat-scrollbar {
+    position: relative;
+    flex: 0 0 14px;
+    background: #e6eeeb;
+    border-left: 1px solid var(--border);
+    touch-action: none;
+    cursor: pointer;
+}
+
+.chat-scrollbar-thumb {
+    position: absolute;
+    top: 0;
+    left: 2px;
+    right: 2px;
+    min-height: 28px;
+    border-radius: 5px;
+    background: #268f84;
+}
+
+.chat-scrollbar:hover .chat-scrollbar-thumb {
+    background: var(--primary-dark);
 }

@@ -33,3 +33,65 @@ function appendChat(role, message, timestamp = new Date().toISOString()) {
     container.append(row);
     container.scrollTop = container.scrollHeight;
 }
+
+function initChatScrollbar() {
+    const panel = document.querySelector('.conversation-column .panel');
+    const messages = document.getElementById('chatMessages');
+    const rail = document.getElementById('chatScrollbar');
+    const thumb = document.getElementById('chatScrollbarThumb');
+    if (!panel || !messages || !rail || !thumb) return;
+
+    function fitPanel() {
+        const top = panel.getBoundingClientRect().top;
+        const available = window.innerWidth > 760 && top < window.innerHeight - 360
+            ? window.innerHeight - Math.max(0, top) - 16
+            : window.innerHeight - 100;
+        panel.style.setProperty('--chat-panel-height', `${Math.max(360, Math.min(880, available))}px`);
+        updateThumb();
+    }
+
+    function updateThumb() {
+        const trackHeight = rail.clientHeight;
+        const scrollRange = Math.max(0, messages.scrollHeight - messages.clientHeight);
+        const thumbHeight = scrollRange
+            ? Math.max(28, trackHeight * messages.clientHeight / messages.scrollHeight)
+            : trackHeight;
+        const travel = Math.max(0, trackHeight - thumbHeight);
+        thumb.style.height = `${thumbHeight}px`;
+        thumb.style.transform = `translateY(${scrollRange ? travel * messages.scrollTop / scrollRange : 0}px)`;
+    }
+
+    let pointerOffset = 0;
+    rail.addEventListener('pointerdown', (event) => {
+        const thumbRect = thumb.getBoundingClientRect();
+        pointerOffset = event.target === thumb
+            ? event.clientY - thumbRect.top
+            : thumbRect.height / 2;
+        rail.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        moveToPointer(event);
+    });
+
+    function moveToPointer(event) {
+        const travel = rail.clientHeight - thumb.clientHeight;
+        if (travel <= 0) return;
+        const thumbTop = Math.max(0, Math.min(travel,
+            event.clientY - rail.getBoundingClientRect().top - pointerOffset));
+        messages.scrollTop = thumbTop / travel * (messages.scrollHeight - messages.clientHeight);
+    }
+
+    rail.addEventListener('pointermove', (event) => {
+        if (rail.hasPointerCapture(event.pointerId)) moveToPointer(event);
+    });
+    messages.addEventListener('scroll', updateThumb);
+    new ResizeObserver(updateThumb).observe(messages);
+    new MutationObserver(updateThumb).observe(messages, { childList: true });
+    const simulationScreen = document.getElementById('screen-sim');
+    new MutationObserver(() => {
+        if (simulationScreen.classList.contains('active')) requestAnimationFrame(fitPanel);
+    }).observe(simulationScreen, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', fitPanel);
+    if (simulationScreen.classList.contains('active')) fitPanel();
+}
+
+document.addEventListener('DOMContentLoaded', initChatScrollbar);

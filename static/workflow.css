@@ -61,7 +61,7 @@
     .tab-bar { display: flex; overflow-x: auto; white-space: nowrap; }
     .tab-btn { flex: 0 0 auto; }
     .conversation-column .panel-body { min-height: 360px; }
-    .chat-messages { min-height: 160px; max-height: 260px; }
+    .chat-transcript .chat-messages { min-height: 0; max-height: none; }
     .submit-section, .submit-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 700px) {

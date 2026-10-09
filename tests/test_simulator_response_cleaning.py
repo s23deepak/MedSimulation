@@ -39,6 +39,18 @@ def test_clean_response_removes_inline_echoed_question_and_patient_label():
     )
 
 
+def test_clean_response_turns_narrated_pointing_into_spoken_location():
+    response = (
+        '"It hurts right here," I said, pointing to my left shoulder. '
+        '"Like someone is stabbing me with a knife. I can barely lift my arm."'
+    )
+
+    assert SimulationEngine._clean_response(response) == (
+        "It hurts in my left shoulder. Like someone is stabbing me with a knife. "
+        "I can barely lift my arm."
+    )
+
+
 def test_keyword_patient_response_removes_outer_quotes():
     case = ClinicalCase(
         case_id="test-case",

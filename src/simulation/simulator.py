@@ -458,6 +458,25 @@ class SimulationEngine:
         text = re.sub(r"^(patient|resident|doctor)\s*:\s*", "", text, flags=re.IGNORECASE)
         text = SimulationEngine._strip_echoed_turn_prefix(text)
 
+        # A narrated gesture can hide the location the patient meant to say.
+        def spoken_location(match: re.Match) -> str:
+            speech = re.sub(
+                r"\bright here\b|\bhere\b",
+                f"in my {match.group('location')}",
+                match.group("speech").rstrip(", ."),
+                flags=re.IGNORECASE,
+            )
+            return f"{speech}. {match.group('rest')}"
+
+        text = re.sub(
+            r'["\u201c](?P<speech>[^"\u201d]+)["\u201d]\s*'
+            r'I said,?\s*pointing (?:to|at) my (?P<location>[^.!?,]+)\.\s*'
+            r'["\u201c](?P<rest>[^"\u201d]+)["\u201d]',
+            spoken_location,
+            text,
+            flags=re.IGNORECASE,
+        )
+
         # Strip multi-turn conversation output (model continuing the dialogue)
         # Keep only the first patient response, before any "USER:" or "RESIDENT:" marker
         multi_turn_match = re.search(r"\n\s*(user|resident|doctor)\s*:", text, flags=re.IGNORECASE)

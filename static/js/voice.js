@@ -1,3 +1,7 @@
+let recognitionPhase = 'idle';
+let autoSendAfterRecognition = false;
+let recognitionErrorMessage = '';
+
 function initializeVoiceRecognition() {
     if (!SpeechRecognition) return null;
     const instance = new SpeechRecognition();
@@ -6,6 +10,7 @@ function initializeVoiceRecognition() {
     instance.continuous = false;
 
     instance.onstart = () => {
+        recognitionPhase = 'listening';
         isListening = true;
         updateVoiceStatus('Listening...');
         showVoiceAlert('', 'info');
@@ -24,24 +29,39 @@ function initializeVoiceRecognition() {
         if (spokenText) {
             document.getElementById('historyInput').value = spokenText;
         }
-        if (finalTranscript.trim() && document.getElementById('voiceAutoSend').checked) {
-            setTimeout(() => askHistory(), 150);
+        if (finalTranscript.trim() && recognitionPhase === 'listening') {
+            autoSendAfterRecognition = document.getElementById('voiceAutoSend').checked;
+            recognitionPhase = 'stopping';
+            instance.stop();
         }
     };
 
     instance.onerror = (event) => {
-        const message = event.error === 'not-allowed'
-            ? 'Microphone permission denied. Allow microphone access in the browser, then turn Voice on again.'
-            : 'Could not capture speech';
-        updateVoiceStatus(message);
-        showVoiceAlert(message, 'warning');
-        showToast(message, 'warning');
+        if (event.error === 'aborted' && recognitionPhase === 'stopping') return;
+        autoSendAfterRecognition = false;
+        const messages = {
+            'not-allowed': 'Microphone permission denied. Allow microphone access in the browser, then try again.',
+            'service-not-allowed': 'Speech recognition is blocked by the browser. Check browser permissions and try again.',
+            'audio-capture': 'Microphone unavailable. Check your input device and close other apps using it, then try again.',
+            'no-speech': 'No speech detected. Tap the mic and try again.',
+            network: 'Speech recognition could not connect. Check your connection and try again.',
+        };
+        recognitionErrorMessage = messages[event.error] || 'Speech recognition failed. Try again.';
+        updateVoiceStatus(recognitionErrorMessage);
+        showVoiceAlert(recognitionErrorMessage, 'warning');
+        if (event.error !== 'no-speech') showToast(recognitionErrorMessage, 'warning');
     };
 
     instance.onend = () => {
+        recognitionPhase = 'idle';
         isListening = false;
         document.getElementById('micButton')?.classList.remove('listening');
+        if (recognitionErrorMessage) return;
         if (voiceModeEnabled) updateVoiceStatus('Voice ready');
+        if (autoSendAfterRecognition) {
+            autoSendAfterRecognition = false;
+            askHistory();
+        }
     };
 
     return instance;
@@ -50,7 +70,11 @@ function initializeVoiceRecognition() {
 function toggleVoiceMode() {
     voiceModeEnabled = !voiceModeEnabled;
     if (!voiceModeEnabled) {
-        if (isListening && recognition) recognition.stop();
+        autoSendAfterRecognition = false;
+        if (recognitionPhase !== 'idle' && recognition) {
+            recognitionPhase = 'stopping';
+            try { recognition.stop(); } catch (e) { recognitionPhase = 'idle'; }
+        }
         if (activePatientAudio) {
             activePatientAudio.pause();
             activePatientAudio = null;
@@ -69,13 +93,25 @@ function toggleVoiceMode() {
 
 function toggleListening() {
     if (!voiceModeEnabled || !recognition) return;
-    if (isListening) {
+    if (recognitionPhase === 'listening') {
+        recognitionPhase = 'stopping';
         recognition.stop();
         return;
     }
+    if (recognitionPhase !== 'idle') return;
+    if (activePatientAudio) {
+        activePatientAudio.pause();
+        activePatientAudio = null;
+    }
+    window.speechSynthesis?.cancel();
+    patientSpeechActive = false;
+    recognitionErrorMessage = '';
+    autoSendAfterRecognition = false;
+    recognitionPhase = 'starting';
     try {
         recognition.start();
     } catch (e) {
+        recognitionPhase = 'idle';
         const message = 'Could not start microphone capture. Check browser microphone permission and try again.';
         updateVoiceStatus('Mic blocked');
         showVoiceAlert(message, 'warning');
@@ -139,8 +175,9 @@ function speakPatientResponse(text, audioUrl = '') {
 }
 
 function stopListeningForPatientSpeech() {
-    if (isListening && recognition) {
-        try { recognition.stop(); } catch (e) {}
+    if (recognitionPhase === 'starting' || recognitionPhase === 'listening') {
+        recognitionPhase = 'stopping';
+        try { recognition.stop(); } catch (e) { recognitionPhase = 'idle'; }
     }
 }
 
@@ -152,7 +189,7 @@ function beginPatientSpeech() {
 
 function endPatientSpeech() {
     patientSpeechActive = false;
-    updateVoiceStatus(voiceModeEnabled ? 'Voice ready' : 'Off');
+    if (recognitionPhase === 'idle') updateVoiceStatus(voiceModeEnabled ? 'Voice ready' : 'Off');
 }
 
 function speakWithBrowserVoice(text) {

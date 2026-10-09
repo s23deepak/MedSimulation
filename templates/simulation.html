@@ -13,8 +13,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css?v=22">
-    <link rel="stylesheet" href="/static/workflow.css">
+    <link rel="stylesheet" href="/static/styles.css?v=23">
+    <link rel="stylesheet" href="/static/workflow.css?v=2">
 </head>
 
 <body data-passwordless="{{ 'true' if passwordless_access else 'false' }}">
@@ -302,12 +302,17 @@
                             </div>
                             <div class="voice-alert" id="voiceAlert" role="status" aria-live="polite"></div>
                             <div class="chat-workspace">
-                                <div class="chat-messages" id="chatMessages" role="log"
-                                    aria-label="Patient conversation">
-                                    <div class="msg msg-patient">
-                                        <div class="msg-label">Patient</div>
-                                        <div class="msg-bubble">Hello, doctor. I'm not feeling well at all. Please help me.
+                                <div class="chat-transcript">
+                                    <div class="chat-messages" id="chatMessages" role="log" tabindex="0"
+                                        aria-label="Patient conversation">
+                                        <div class="msg msg-patient">
+                                            <div class="msg-label">Patient</div>
+                                            <div class="msg-bubble">Hello, doctor. I'm not feeling well at all. Please help me.
+                                            </div>
                                         </div>
+                                    </div>
+                                    <div class="chat-scrollbar" id="chatScrollbar" aria-hidden="true">
+                                        <div class="chat-scrollbar-thumb" id="chatScrollbarThumb"></div>
                                     </div>
                                 </div>
                                 <div class="chat-composer">
@@ -508,9 +513,9 @@
         src="https://unpkg.com/cornerstone-wado-image-loader@4.13.2/dist/cornerstoneWADOImageLoader.bundle.min.js"></script>
     <script src="https://unpkg.com/cornerstone-tools@6.0.8/dist/cornerstoneTools.min.js"></script>
 
-    <script src="/static/js/api.js" defer></script>
+    <script src="/static/js/api.js?v=2" defer></script>
     <script src="/static/js/state.js" defer></script>
-    <script src="/static/js/voice.js" defer></script>
+    <script src="/static/js/voice.js?v=2" defer></script>
     <script src="/static/js/navigation.js" defer></script>
     <script src="/static/js/cases.js" defer></script>
     <script src="/static/js/workspace.js" defer></script>
