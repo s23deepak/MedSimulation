@@ -64,9 +64,46 @@ def case_record(case_id):
     if not row:
         return None
     data = decode(row["case_data"])
+    data["patient_image_url"] = ""
     for key in ("source", "source_ref", "status", "version", "reviewer", "approved_at", "review_notes"):
         data[key] = row[key]
     return data
+
+
+def active_portrait(case_id, case_version):
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM portrait_assets WHERE case_id=? AND case_version=? AND active=1",
+            (case_id, case_version),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def portrait_asset(asset_id):
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM portrait_assets WHERE asset_id=?", (asset_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def save_portrait_asset(asset_id, case_id, case_version, file_path, seed, model, workflow_version):
+    with _connect() as conn:
+        row = conn.execute("SELECT version FROM cases WHERE case_id=?", (case_id,)).fetchone()
+        if not row or row["version"] != case_version:
+            raise ValueError("Case changed during portrait generation")
+        conn.execute(
+            "UPDATE portrait_assets SET active=0 WHERE case_id=? AND case_version=? AND active=1",
+            (case_id, case_version),
+        )
+        conn.execute(
+            """INSERT INTO portrait_assets
+            (asset_id,case_id,case_version,file_path,seed,model,workflow_version,active,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?)""",
+            (asset_id, case_id, case_version, file_path, seed, model, workflow_version, 1, now()),
+        )
+        audit("portrait-generator", "portrait_generated", case_id,
+              {"asset_id": asset_id, "version": case_version}, conn)
 
 def save_case(case_data, source="ai_generated", source_ref="", status="pending", expected_version=None):
     # Approval only happens in the review transaction, never through import metadata.
@@ -74,6 +111,7 @@ def save_case(case_data, source="ai_generated", source_ref="", status="pending",
     _ensure_db()
     case_id = case_data["case_id"]
     clean = {k: v for k, v in case_data.items() if k in ClinicalCase.__dataclass_fields__}
+    clean["patient_image_url"] = ""
     ClinicalCase(**clean)
     with _connect() as conn:
         sql = """INSERT INTO cases (case_id,title,specialty,difficulty,source,source_ref,case_data,status)

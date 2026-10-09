@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from src.simulation import database
+from src.simulation.portraits import portrait_dir
 from src.simulation.chat_chain import clear_session_history
 from ..models import (
     Start,
@@ -75,6 +77,31 @@ def start(payload: Start, request: Request):
 def session(session_id: str, request: Request):
     own_session(request, session_id)
     return request.app.state.simulation_engine.get_session(session_id).to_dict()
+
+
+@router.get("/session/{session_id}/portrait", include_in_schema=False)
+def session_portrait(session_id: str, request: Request):
+    session_data = own_session(request, session_id)
+    asset_id = session_data.get("portrait_asset_id")
+    asset = database.portrait_asset(asset_id) if asset_id else None
+    if (
+        not asset
+        or asset["case_id"] != session_data["case_id"]
+        or asset["case_version"] != session_data["case_version"]
+    ):
+        raise HTTPException(404, "Portrait not found")
+    base = portrait_dir().resolve()
+    target = (base / asset["file_path"]).resolve()
+    if not target.is_relative_to(base):
+        raise HTTPException(404, "Portrait not found")
+    if not target.is_file() and request.app.state.reload_portrait_volume:
+        try:
+            request.app.state.reload_portrait_volume()
+        except RuntimeError as exc:
+            raise HTTPException(503, "Portrait temporarily unavailable") from exc
+    if not target.is_file():
+        raise HTTPException(404, "Portrait not found")
+    return FileResponse(target, media_type="image/webp")
 
 
 @router.post("/history", response_model=HistoryResult)

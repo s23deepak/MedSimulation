@@ -25,6 +25,7 @@ from .chat_chain import build_patient_chain, clear_session_history
 from .scorer import score_session
 from .debrief import generate_debrief
 from .imaging import get_image_url
+from . import database
 from .database import save_session, load_session
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class SimulationSession:
     started_at: str = field(default_factory=lambda: datetime.now().isoformat())
     completed_at: str = ""
     owner_id: str = ""
+    portrait_asset_id: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -81,7 +83,11 @@ class SimulationSession:
             "specialty": self.case.specialty,
             "difficulty": self.case.difficulty,
             "presentation": self.case.presentation,
-            "patient_image_url": getattr(self.case, "patient_image_url", ""),
+            "portrait_asset_id": self.portrait_asset_id,
+            "generated_portrait_url": (
+                f"/api/simulation/session/{self.session_id}/portrait"
+                if self.portrait_asset_id else ""
+            ),
             "initial_vitals": self.case.initial_vitals,
             "abnormal_vitals": self.case.abnormal_vitals,
             "learning_objectives": self.case.learning_objectives,
@@ -147,12 +153,17 @@ class SimulationEngine:
         case = get_case(case_id)
         if case is None:
             raise ValueError(f"Case {case_id} not found")
+        case = deepcopy(case)
+        case.patient_image_url = ""
         session = SimulationSession(
             session_id=f"SIM-{uuid.uuid4().hex.upper()}",
             resident_name=resident_name,
             case_id=case_id,
-            case=deepcopy(case),
+            case=case,
             owner_id=owner_id,
+            portrait_asset_id=(
+                (database.active_portrait(case_id, case.version) or {}).get("asset_id", "")
+            ),
         )
         self._sessions[session.session_id] = session
         self._persist_session(session)
@@ -174,6 +185,7 @@ class SimulationEngine:
         if case is None:
             logger.warning("Session %s references non-existent case %s", session_id, session_data.get("case_id"))
             return None
+        case.patient_image_url = ""
 
         session = SimulationSession(
             session_id=session_data.get("session_id"),
@@ -181,6 +193,7 @@ class SimulationEngine:
             case_id=session_data.get("case_id"),
             case=case,
             owner_id=session_data.get("owner_id", ""),
+            portrait_asset_id=session_data.get("portrait_asset_id", ""),
         )
         # Restore state
         session.history_questions = session_data.get("history_questions", [])

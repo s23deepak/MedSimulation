@@ -33,6 +33,21 @@ def migrate(engine, schema):
             ]:
                 conn.execute(text(sql))
             conn.execute(text("INSERT INTO schema_migrations VALUES (2)"))
+        if 3 not in applied:
+            conn.execute(text("""CREATE TABLE portrait_assets (
+                asset_id TEXT PRIMARY KEY,
+                case_id TEXT NOT NULL REFERENCES cases(case_id),
+                case_version INTEGER NOT NULL,
+                file_path TEXT NOT NULL,
+                seed BIGINT NOT NULL,
+                model TEXT NOT NULL,
+                workflow_version INTEGER NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )"""))
+            conn.execute(text("""CREATE UNIQUE INDEX portrait_active_case_version
+                ON portrait_assets(case_id, case_version) WHERE active=1"""))
+            conn.execute(text("INSERT INTO schema_migrations VALUES (3)"))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+medsimulation:
+  base_path: /models/split_files
+  text_encoders: text_encoders
+  diffusion_models: diffusion_models
+  vae: vae

@@ -30,6 +30,7 @@ data/medsim.db
 data/imaging/dicom/
 data/imaging/tmp/
 data/imaging
+data/portraits/
 
 # OS-generated files
 .DS_Store

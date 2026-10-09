@@ -126,6 +126,45 @@ ship the development SQLite database.
 - Completed sessions export PDF and JSON successfully. Unreviewed cases export
   without numeric scores. Run `scripts/deployment_smoke.py` for this flow.
 
+## Synthetic Case Portraits
+
+Portraits are generated from fictional case demographics only. Existing
+`patient_image_url` fields are ignored by the simulation UI. The ComfyUI
+workflow is `workflows/patient_portrait_api.json`; generation runs outside
+learner sessions, and missing portraits simply leave the portrait area empty.
+
+For local development, start ComfyUI with the three Z-Image Turbo model files
+listed in `modal_portraits.py`, then run:
+
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-linux uv run python scripts/generate_case_portraits.py SIM-001
+```
+
+The standard Z-Image Turbo workflow requires more GPU memory than the project's
+8 GB laptop GPU. Local integration tests mock ComfyUI; a real image test needs
+a suitable GPU. The same workflow runs on Modal with an A10G:
+
+```bash
+modal run modal_portraits.py::download_models
+modal run modal_portraits.py --case-id SIM-001
+modal deploy modal_portraits.py
+UV_PROJECT_ENVIRONMENT=.venv-linux uv run python scripts/generate_case_portraits.py SIM-001 --modal
+```
+
+The first two Modal commands test the worker and image before deploying it.
+The last command invokes the deployed worker. Its files are saved under
+`/data/portraits/<case-id>/v<version>/<asset-id>.webp` in the existing
+`medsimulation-data` Volume. Model weights use the separate
+`medsimulation-portrait-models` Volume. The web app serves the portrait from
+`/api/simulation/session/<session-id>/portrait` after checking session access.
+
+The current hosted pilot stores SQLite on the shared data Volume. Generate
+portraits during a maintenance window, then restart/redeploy `modal_app.py`
+before starting new sessions so the web container sees both the new file and
+the updated SQLite database. For concurrent production generation, use managed
+Postgres for portrait metadata; the image route reloads the data Volume if a
+new image is not yet visible in a running web container.
+
 ## Troubleshooting
 
 ### App fails during startup

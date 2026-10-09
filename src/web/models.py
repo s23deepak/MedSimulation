@@ -162,7 +162,7 @@ class SessionView(BaseModel):
     investigations_ordered: list[str]
     imaging_studies_viewed: list[str]
     imaging_studies: list[dict[str, Any]]
-    patient_image_url: str
+    generated_portrait_url: str = ""
     diagnosis_submitted: str
     management_submitted: list[str]
     clinical_notes: str

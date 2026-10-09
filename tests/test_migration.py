@@ -25,4 +25,7 @@ def test_legacy_auto_approvals_become_pending(tmp_path, monkeypatch):
     with database._connect() as conn:
         columns = {row['name'] for row in conn.execute('PRAGMA table_info(sessions)').fetchall()}
         assert 'session_data' in columns and 'updated_at' in columns
-        assert conn.execute('SELECT COUNT(*) AS total FROM schema_migrations').fetchone()['total'] == 2
+        assert conn.execute('SELECT COUNT(*) AS total FROM schema_migrations').fetchone()['total'] == 3
+        assert 'portrait_assets' in {
+            row['name'] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
