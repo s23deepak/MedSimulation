@@ -71,12 +71,43 @@ def case_record(case_id):
 
 
 def active_portrait(case_id, case_version):
+    review_required = os.getenv("PORTRAIT_REVIEW_REQUIRED", "false").lower() in {"1", "true", "yes"}
+    with _connect() as conn:
+        if review_required:
+            row = conn.execute(
+                """SELECT * FROM portrait_assets WHERE case_id=? AND case_version=?
+                AND review_status='approved' ORDER BY reviewed_at DESC, asset_id DESC LIMIT 1""",
+                (case_id, case_version),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """SELECT * FROM portrait_assets WHERE case_id=? AND case_version=?
+                AND active=1 AND review_status IN ('approved', 'unreviewed')""",
+                (case_id, case_version),
+            ).fetchone()
+    return dict(row) if row else None
+
+
+def latest_portrait(case_id, case_version):
     with _connect() as conn:
         row = conn.execute(
-            "SELECT * FROM portrait_assets WHERE case_id=? AND case_version=? AND active=1",
+            """SELECT * FROM portrait_assets WHERE case_id=? AND case_version=?
+            AND review_status='unreviewed' ORDER BY created_at DESC, asset_id DESC LIMIT 1""",
             (case_id, case_version),
         ).fetchone()
     return dict(row) if row else None
+
+
+def pending_portraits(limit=100):
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT p.*, c.title FROM portrait_assets p
+            JOIN cases c ON c.case_id=p.case_id AND c.version=p.case_version
+            WHERE p.review_status='unreviewed'
+            ORDER BY p.created_at DESC, p.asset_id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def portrait_asset(asset_id):
@@ -87,7 +118,9 @@ def portrait_asset(asset_id):
     return dict(row) if row else None
 
 
-def save_portrait_asset(asset_id, case_id, case_version, file_path, seed, model, workflow_version):
+def save_portrait_asset(asset_id, case_id, case_version, file_path, seed, model,
+                        workflow_version, prompt_hash="", target_age=None, appearance_profile="",
+                        prompt_version=1):
     with _connect() as conn:
         row = conn.execute("SELECT version FROM cases WHERE case_id=?", (case_id,)).fetchone()
         if not row or row["version"] != case_version:
@@ -98,12 +131,82 @@ def save_portrait_asset(asset_id, case_id, case_version, file_path, seed, model,
         )
         conn.execute(
             """INSERT INTO portrait_assets
-            (asset_id,case_id,case_version,file_path,seed,model,workflow_version,active,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?)""",
-            (asset_id, case_id, case_version, file_path, seed, model, workflow_version, 1, now()),
+            (asset_id,case_id,case_version,file_path,seed,model,workflow_version,active,
+             created_at,prompt_version,prompt_hash,target_age,appearance_profile,review_status)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'unreviewed')""",
+            (asset_id, case_id, case_version, file_path, seed, model, workflow_version,
+             1, now(), prompt_version, prompt_hash, target_age, appearance_profile),
         )
         audit("portrait-generator", "portrait_generated", case_id,
               {"asset_id": asset_id, "version": case_version}, conn)
+
+
+def record_model_run(component, prompt_name, prompt_version, prompt_hash, model, status,
+                     duration_ms, case_id=None, session_id=None, asset_id=None, error_type=None):
+    run_id = uuid.uuid4().hex
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO model_runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (run_id, component, case_id, session_id, asset_id, prompt_name, prompt_version,
+             prompt_hash, model, status, duration_ms, error_type, now()),
+        )
+    return run_id
+
+
+def record_model_evaluation(component, metric, value, evaluator, run_id=None,
+                            asset_id=None, notes=None):
+    if not run_id and not asset_id:
+        raise ValueError("An evaluation must reference a model run or portrait")
+    with _connect() as conn:
+        if run_id:
+            run = conn.execute("SELECT component FROM model_runs WHERE run_id=?", (run_id,)).fetchone()
+            if not run or run["component"] != component:
+                raise ValueError("Model run not found for component")
+        conn.execute(
+            "INSERT INTO model_evaluations VALUES (?,?,?,?,?,?,?,?,?)",
+            (uuid.uuid4().hex, run_id, asset_id, component, metric, str(value),
+             evaluator, notes, now()),
+        )
+
+
+def review_portrait(asset_id, reviewer, approved, checks=None, notes=""):
+    checks = checks or {}
+    if not reviewer or not reviewer.strip():
+        raise ValueError("Reviewer name is required")
+    if approved and set(checks) != {"age_match", "appearance_match", "image_quality"}:
+        raise ValueError("Approval requires age, appearance, and image quality checks")
+    if approved and not all(checks.values()):
+        raise ValueError("All checks must pass before approval")
+    if not approved and not notes.strip():
+        raise ValueError("Rejection requires a reason")
+    with _connect() as conn:
+        asset = conn.execute("SELECT * FROM portrait_assets WHERE asset_id=?", (asset_id,)).fetchone()
+        if not asset or asset["review_status"] != "unreviewed":
+            raise ValueError("Portrait is not awaiting review")
+        case = conn.execute("SELECT version FROM cases WHERE case_id=?", (asset["case_id"],)).fetchone()
+        if not case or case["version"] != asset["case_version"]:
+            raise ValueError("Case changed; regenerate its portrait")
+        if approved:
+            conn.execute(
+                "UPDATE portrait_assets SET active=0 WHERE case_id=? AND case_version=? AND active=1",
+                (asset["case_id"], asset["case_version"]),
+            )
+        updated = conn.execute(
+            """UPDATE portrait_assets SET active=?, review_status=?, reviewed_by=?,
+            reviewed_at=?, review_notes=? WHERE asset_id=? AND review_status='unreviewed'""",
+            (1 if approved else 0, "approved" if approved else "rejected",
+             reviewer, now(), notes, asset_id),
+        )
+        if updated.rowcount != 1:
+            raise ValueError("Portrait was reviewed concurrently")
+        for metric, value in checks.items():
+            conn.execute(
+                "INSERT INTO model_evaluations VALUES (?,?,?,?,?,?,?,?,?)",
+                (uuid.uuid4().hex, None, asset_id, "portrait", metric,
+                 "pass" if value else "fail", reviewer, notes, now()),
+            )
+        audit(reviewer, "portrait_approved" if approved else "portrait_rejected",
+              asset["case_id"], {"asset_id": asset_id, "notes": notes}, conn)
 
 def save_case(case_data, source="ai_generated", source_ref="", status="pending", expected_version=None):
     # Approval only happens in the review transaction, never through import metadata.

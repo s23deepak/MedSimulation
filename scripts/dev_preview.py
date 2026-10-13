@@ -21,18 +21,28 @@ def seed_local_cases(source: Path, target: Path) -> int:
     if not source.is_file():
         return 0
     with sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True) as existing:
-        table = existing.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='cases'"
-        ).fetchone()
-        if not table:
+        if not existing.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='cases'"
+        ).fetchone():
             return 0
-        rows = existing.execute("SELECT * FROM cases").fetchall()
         with sqlite3.connect(target) as preview:
-            preview.execute(table[0])
-            if rows:
-                placeholders = ",".join("?" for _ in rows[0])
-                preview.executemany(f"INSERT INTO cases VALUES ({placeholders})", rows)
-    return len(rows)
+            case_count = 0
+            for table in ("cases", "portrait_assets"):
+                if not existing.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+                ).fetchone():
+                    continue
+                rows = existing.execute(f"SELECT * FROM {table}").fetchall()
+                if table == "cases":
+                    case_count = len(rows)
+                if rows:
+                    columns = [column[1] for column in existing.execute(f"PRAGMA table_info({table})")]
+                    names = ",".join(columns)
+                    placeholders = ",".join("?" for _ in columns)
+                    preview.executemany(
+                        f"INSERT OR REPLACE INTO {table} ({names}) VALUES ({placeholders})", rows
+                    )
+    return case_count
 
 
 def main() -> None:
@@ -42,10 +52,11 @@ def main() -> None:
     source = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'medsim.db')))
     temporary = tempfile.TemporaryDirectory(prefix='medsim-preview-')
     target = Path(temporary.name) / 'preview.db'
-    imported = seed_local_cases(source, target)
     os.environ['DATABASE_PATH'] = str(target)
     from src.simulation import database
     database._DB_PATH = str(target)
+    database.init_db()
+    imported = seed_local_cases(source, target)
     settings = Settings(environment='local', allowed_origins=[f'http://127.0.0.1:{args.port}'])
     app = create_app(settings=settings, agent=PreviewAgent(), initialize_agent=False)
     print(f'Local preview (no sign-in): http://127.0.0.1:{args.port}/simulation', flush=True)

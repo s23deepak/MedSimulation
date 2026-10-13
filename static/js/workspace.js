@@ -133,12 +133,14 @@ function setupExamSystems() {
     const previousPortrait = sg.parentNode.querySelector('.patient-portrait');
     if (previousPortrait) previousPortrait.remove();
     if (currentSession && currentSession.generated_portrait_url) {
-        const imgWrap = document.createElement('div');
+        const imgWrap = document.createElement('figure');
         imgWrap.className = 'patient-portrait';
         const portrait = document.createElement('img');
         portrait.src = currentSession.generated_portrait_url;
         portrait.alt = 'Generated portrait of the simulated patient';
-        imgWrap.append(portrait);
+        const caption = document.createElement('figcaption');
+        caption.textContent = 'AI-generated patient portrait';
+        imgWrap.append(portrait, caption);
         sg.parentNode.insertBefore(imgWrap, sg);
     }
 

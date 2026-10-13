@@ -26,6 +26,7 @@ contradict itself across turns within the same simulation session.
 from __future__ import annotations
 
 import logging
+import hashlib
 from typing import Any
 
 from langchain_core.chat_history import InMemoryChatMessageHistory
@@ -101,6 +102,8 @@ Patient: "I tried taking some painkillers from my medicine cabinet, but they hav
 Resident: "What medications do you take?"
 Patient: "Just my blood pressure pill - lisinopril, I think 10mg? Take it every morning."
 """
+PATIENT_PROMPT_VERSION = 1
+PATIENT_PROMPT_HASH = hashlib.sha256(_PATIENT_SYSTEM.encode()).hexdigest()
 
 from datetime import datetime
 from langchain_core.runnables import RunnableLambda

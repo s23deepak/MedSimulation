@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.simulation import database
 from src.simulation.comfyui_client import ComfyUIClient
-from src.simulation.portraits import generate_case_portrait
+from src.simulation.portraits import PROMPT_VERSION, generate_case_portrait
 
 
 def main():
@@ -44,8 +44,11 @@ def main():
     client = ComfyUIClient(args.comfy_url)
     for case_id in case_ids:
         case = database.case_record(case_id)
-        if not args.regenerate and database.active_portrait(case_id, case["version"]):
-            print(f"{case_id}: already has a portrait")
+        current = database.active_portrait(case_id, case["version"]) or database.latest_portrait(
+            case_id, case["version"]
+        )
+        if not args.regenerate and current and current["prompt_version"] == PROMPT_VERSION:
+            print(f"{case_id}: already has a current portrait")
             continue
         result = generate_case_portrait(case_id, client, seed=args.seed)
         print(f"{case_id}: {result['file_path']}")

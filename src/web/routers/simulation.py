@@ -88,6 +88,7 @@ def session_portrait(session_id: str, request: Request):
         not asset
         or asset["case_id"] != session_data["case_id"]
         or asset["case_version"] != session_data["case_version"]
+        or (database.active_portrait(asset["case_id"], asset["case_version"]) or {}).get("asset_id") != asset_id
     ):
         raise HTTPException(404, "Portrait not found")
     base = portrait_dir().resolve()
