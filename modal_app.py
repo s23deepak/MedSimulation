@@ -70,6 +70,7 @@ image = (
         "langchain-core>=0.3.0",
         "sqlalchemy>=2.0",
         "psycopg[binary]>=3.2",
+        "pillow>=11.0",
         # vLLM and GPU dependencies
         "vllm>=0.6.0",
         "bitsandbytes>=0.46.1",
@@ -452,6 +453,7 @@ def serve():
     logger.info("ModalVLLMClient injected — vLLM will route via Modal RPC to VLLMService")
 
     from main import app as backend_app
+    backend_app.state.reload_portrait_volume = data_volume.reload
 
     logger.info("MedSimulation backend ready")
     logger.info("Access at: https://<workspace>--medsimulation-serve.modal.run")
@@ -480,6 +482,7 @@ image_cpu = (
         "langchain-core>=0.3.0",
         "sqlalchemy>=2.0",
         "psycopg[binary]>=3.2",
+        "pillow>=11.0",
     )
     .add_local_dir("src", remote_path="/root/src")
     .add_local_dir("templates", remote_path="/root/templates")
@@ -538,6 +541,7 @@ def serve_cpu():
     (app_dir / "data" / "imaging" / "dicom").mkdir(exist_ok=True)
 
     from main import app as backend_app
+    backend_app.state.reload_portrait_volume = data_volume.reload
 
     logger.info("MedSimulation CPU backend ready (cloud LLM mode)")
 

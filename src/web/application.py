@@ -73,6 +73,7 @@ def create_app(settings=None, agent=None, initialize_agent=True):
     app.state.ready = agent is not None
     app.state.warming_up = False
     app.state.warmup_task = None
+    app.state.reload_portrait_volume = None
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,

@@ -130,14 +130,17 @@ function setupExamSystems() {
     const sg = document.getElementById('systemGrid');
     sg.innerHTML = '';
 
-    // Patient portrait
-    if (currentSession && currentSession.patient_image_url) {
-        const imgWrap = document.createElement('div');
+    const previousPortrait = sg.parentNode.querySelector('.patient-portrait');
+    if (previousPortrait) previousPortrait.remove();
+    if (currentSession && currentSession.generated_portrait_url) {
+        const imgWrap = document.createElement('figure');
         imgWrap.className = 'patient-portrait';
         const portrait = document.createElement('img');
-        portrait.src = safeMediaUrl(currentSession.patient_image_url);
-        portrait.alt = 'Patient portrait';
-        imgWrap.append(portrait);
+        portrait.src = currentSession.generated_portrait_url;
+        portrait.alt = 'Generated portrait of the simulated patient';
+        const caption = document.createElement('figcaption');
+        caption.textContent = 'AI-generated patient portrait';
+        imgWrap.append(portrait, caption);
         sg.parentNode.insertBefore(imgWrap, sg);
     }
 

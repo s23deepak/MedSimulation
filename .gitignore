@@ -30,6 +30,8 @@ data/medsim.db
 data/imaging/dicom/
 data/imaging/tmp/
 data/imaging
+data/portraits/
+data/portrait_review.html
 
 # OS-generated files
 .DS_Store

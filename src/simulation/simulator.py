@@ -13,6 +13,7 @@ Manages resident simulation sessions end-to-end:
 from __future__ import annotations
 
 import logging
+import time
 import re
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -21,10 +22,13 @@ from datetime import datetime
 from typing import Any
 
 from .cases import ClinicalCase, get_case, list_cases
-from .chat_chain import build_patient_chain, clear_session_history
+from .chat_chain import (
+    PATIENT_PROMPT_HASH, PATIENT_PROMPT_VERSION, build_patient_chain, clear_session_history,
+)
 from .scorer import score_session
 from .debrief import generate_debrief
 from .imaging import get_image_url
+from . import database
 from .database import save_session, load_session
 
 logger = logging.getLogger(__name__)
@@ -62,8 +66,10 @@ class SimulationSession:
     started_at: str = field(default_factory=lambda: datetime.now().isoformat())
     completed_at: str = ""
     owner_id: str = ""
+    portrait_asset_id: str = ""
 
     def to_dict(self) -> dict:
+        visible_portrait = database.active_portrait(self.case_id, self.case.version)
         return {
             "session_id": self.session_id,
             "owner_id": self.owner_id,
@@ -81,7 +87,11 @@ class SimulationSession:
             "specialty": self.case.specialty,
             "difficulty": self.case.difficulty,
             "presentation": self.case.presentation,
-            "patient_image_url": getattr(self.case, "patient_image_url", ""),
+            "portrait_asset_id": self.portrait_asset_id,
+            "generated_portrait_url": (
+                f"/api/simulation/session/{self.session_id}/portrait"
+                if visible_portrait and visible_portrait["asset_id"] == self.portrait_asset_id else ""
+            ),
             "initial_vitals": self.case.initial_vitals,
             "abnormal_vitals": self.case.abnormal_vitals,
             "learning_objectives": self.case.learning_objectives,
@@ -147,12 +157,17 @@ class SimulationEngine:
         case = get_case(case_id)
         if case is None:
             raise ValueError(f"Case {case_id} not found")
+        case = deepcopy(case)
+        case.patient_image_url = ""
         session = SimulationSession(
             session_id=f"SIM-{uuid.uuid4().hex.upper()}",
             resident_name=resident_name,
             case_id=case_id,
-            case=deepcopy(case),
+            case=case,
             owner_id=owner_id,
+            portrait_asset_id=(
+                (database.active_portrait(case_id, case.version) or {}).get("asset_id", "")
+            ),
         )
         self._sessions[session.session_id] = session
         self._persist_session(session)
@@ -174,6 +189,7 @@ class SimulationEngine:
         if case is None:
             logger.warning("Session %s references non-existent case %s", session_id, session_data.get("case_id"))
             return None
+        case.patient_image_url = ""
 
         session = SimulationSession(
             session_id=session_data.get("session_id"),
@@ -181,6 +197,7 @@ class SimulationEngine:
             case_id=session_data.get("case_id"),
             case=case,
             owner_id=session_data.get("owner_id", ""),
+            portrait_asset_id=session_data.get("portrait_asset_id", ""),
         )
         # Restore state
         session.history_questions = session_data.get("history_questions", [])
@@ -228,6 +245,10 @@ class SimulationEngine:
             for turn in session.history_questions:
                 prompt_history.add_messages([HumanMessage(content=turn["question"]), AIMessage(content=turn["response"])])
 
+        started = time.monotonic()
+        run_status = "error"
+        error_type = None
+        run_id = None
         try:
             result = self._chain.invoke(
                 {
@@ -239,15 +260,33 @@ class SimulationEngine:
             )
             response = self._clean_response(result.content)
             ai = True
+            run_status = "success"
         except Exception as e:
+            error_type = type(e).__name__
             logger.warning("Chain history response failed: %s", e)
             raise RuntimeError("Patient response model is unavailable") from e
+        finally:
+            try:
+                run_id = database.record_model_run(
+                    "patient_agent", "patient_persona", PATIENT_PROMPT_VERSION,
+                    PATIENT_PROMPT_HASH, getattr(self.agent, "model", type(self.agent).__name__),
+                    run_status, int((time.monotonic() - started) * 1000),
+                    case_id=case.case_id, session_id=session_id, error_type=error_type,
+                )
+                if run_status == "success":
+                    database.record_model_evaluation(
+                        "patient_agent", "response_present", bool(response.strip()),
+                        "deterministic", run_id=run_id,
+                    )
+            except Exception:
+                logger.exception("Could not record patient-agent telemetry")
 
         entry = {
             "question": question,
             "response": response,
             "ai": ai,
             "ts": datetime.now().isoformat(),
+            "model_run_id": run_id,
         }
         session.history_questions.append(entry)
         session.action_log.append({"type": "history", "detail": question, "ts": entry["ts"]})

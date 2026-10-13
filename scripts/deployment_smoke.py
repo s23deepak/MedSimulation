@@ -17,6 +17,12 @@ with httpx.Client(base_url=args.base_url, timeout=120) as client:
     started = client.post('/api/simulation/start', json={'case_id': args.case_id, 'resident_name': 'Smoke test'}); started.raise_for_status()
     sid = started.json()['session_id']
     try:
+        portrait_url = started.json().get('generated_portrait_url')
+        if portrait_url:
+            portrait = client.get(portrait_url)
+            portrait.raise_for_status()
+            assert portrait.headers['content-type'].startswith('image/webp')
+            assert portrait.content.startswith(b'RIFF')
         for question in ['Tell me about the pain', 'When did it start?', 'Any medication allergies?']:
             client.post('/api/simulation/history', json={'session_id': sid, 'question': question}).raise_for_status()
         client.post('/api/simulation/exam', json={'session_id': sid, 'system': 'General'}).raise_for_status()
