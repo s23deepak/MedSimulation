@@ -29,9 +29,6 @@ def webapp(tmp_path, monkeypatch):
     CASES.clear()
     CASES.update(original)
 
-def login(client, username="learner"):
-    return {"user_id": "pilot-learner", "role": "learner", "guest": True}
-
 def complete(client, case_id="SIM-001"):
     response = client.post("/api/simulation/start", json={"case_id": case_id})
     assert response.status_code == 200, response.text

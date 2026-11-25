@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from src.simulation import database
 from src.simulation.portraits import portrait_dir
+from src.simulation.figures import FigureUnavailable, cached_figure, publisher_figure_url
 from src.simulation.chat_chain import clear_session_history
 from ..models import (
     Start,
@@ -77,6 +78,19 @@ def start(payload: Start, request: Request):
 def session(session_id: str, request: Request):
     own_session(request, session_id)
     return request.app.state.simulation_engine.get_session(session_id).to_dict()
+
+
+@router.get("/session/{session_id}/figures/{index}", include_in_schema=False)
+def session_figure(session_id: str, index: int, request: Request):
+    session_data = own_session(request, session_id)
+    studies = (session_data.get("case_snapshot") or {}).get("imaging_studies") or []
+    if not 0 <= index < len(studies) or not (url := publisher_figure_url(studies[index])):
+        raise HTTPException(404, "Figure unavailable")
+    try:
+        path, media_type = cached_figure(url)
+    except FigureUnavailable as exc:
+        raise HTTPException(502, "Publisher figure unavailable") from exc
+    return FileResponse(path, media_type=media_type)
 
 
 @router.get("/session/{session_id}/portrait", include_in_schema=False)

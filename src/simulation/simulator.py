@@ -28,6 +28,7 @@ from .chat_chain import (
 from .scorer import score_session
 from .debrief import generate_debrief
 from .imaging import get_image_url
+from .figures import publisher_figure_url
 from . import database
 from .database import save_session, load_session
 
@@ -68,6 +69,21 @@ class SimulationSession:
     owner_id: str = ""
     portrait_asset_id: str = ""
 
+    def study_media(self, study: dict, index: int) -> dict:
+        path = study.get("file_path") or ""
+        if path.startswith(("http://", "https://")):
+            url = ""
+            if publisher_figure_url(study):
+                url = f"/api/simulation/session/{self.session_id}/figures/{index}"
+            return {"image_url": url, "thumbnail": url}
+        thumbnail = study.get("thumbnail") or ""
+        if thumbnail.startswith(("http://", "https://")):
+            thumbnail = ""
+        return {
+            "image_url": get_image_url(path) if path else "",
+            "thumbnail": get_image_url(thumbnail) if thumbnail else "",
+        }
+
     def to_dict(self) -> dict:
         visible_portrait = database.active_portrait(self.case_id, self.case.version)
         return {
@@ -104,10 +120,9 @@ class SimulationSession:
                     "study_id": s["study_id"],
                     "modality": s["modality"],
                     "description": s["description"],
-                    "image_url": get_image_url(s["file_path"]) if s.get("file_path") else "",
-                    "thumbnail": get_image_url(s["thumbnail"]) if s.get("thumbnail") else "",
+                    **self.study_media(s, index),
                 }
-                for s in (self.case.imaging_studies or [])
+                for index, s in enumerate(self.case.imaging_studies or [])
             ],
             "diagnosis_submitted": self.diagnosis_submitted,
             "management_submitted": self.management_submitted,
@@ -241,9 +256,9 @@ class SimulationEngine:
         from langchain_core.messages import AIMessage, HumanMessage
         from .chat_chain import get_session_history
         prompt_history = get_session_history(session_id)
-        if not prompt_history.messages and session.history_questions:
-            for turn in session.history_questions:
-                prompt_history.add_messages([HumanMessage(content=turn["question"]), AIMessage(content=turn["response"])])
+        prompt_history.clear()
+        for turn in session.history_questions:
+            prompt_history.add_messages([HumanMessage(content=turn["question"]), AIMessage(content=turn["response"])])
 
         started = time.monotonic()
         run_status = "error"
@@ -339,12 +354,11 @@ class SimulationEngine:
         Returns metadata + findings (ground truth revealed).
         """
         session = self._get_active_session(session_id)
-        study = next(
-            (s for s in (session.case.imaging_studies or []) if s["study_id"] == study_id),
-            None,
-        )
-        if study is None:
-            return {"study_id": study_id, "error": "Imaging study not found for this case."}
+        for index, study in enumerate(session.case.imaging_studies or []):
+            if study["study_id"] == study_id:
+                break
+        else:
+            raise ValueError("Imaging study not found for this case.")
 
         if study_id not in session.imaging_studies_viewed:
             session.imaging_studies_viewed.append(study_id)
@@ -356,7 +370,7 @@ class SimulationEngine:
             "study_id": study["study_id"],
             "modality": study["modality"],
             "description": study["description"],
-            "image_url": get_image_url(study["file_path"]) if study.get("file_path") else "",
+            "image_url": session.study_media(study, index)["image_url"],
             "findings": study["findings"],
         }
 

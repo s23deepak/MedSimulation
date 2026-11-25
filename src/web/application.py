@@ -15,7 +15,7 @@ from src.simulation.imaging import IMAGING_DIR
 from .config import Settings
 from .models import DicomList, Health, ModelStatus, Status
 from .routers import cases, exports, simulation
-from .security import current_user, rate_limit_actor
+from .security import current_user, identify_browser, rate_limit_actor
 
 ROOT = Path(__file__).resolve().parents[2]
 logger = logging.getLogger(__name__)
@@ -89,10 +89,22 @@ def create_app(settings=None, agent=None, initialize_agent=True):
         except Exception:
             logger.exception("Unhandled request failure")
             response = JSONResponse({"detail": "Request failed. Please retry."}, status_code=500)
+        cookie = getattr(request.state, "new_learner_cookie", None)
+        if cookie:
+            name, token, secure = cookie
+            response.set_cookie(
+                name,
+                token,
+                max_age=365 * 24 * 3600,
+                path="/",
+                httponly=True,
+                secure=secure,
+                samesite="lax",
+            )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["X-Frame-Options"] = "DENY"
-        if request.url.path.startswith(("/api/", "/imaging/")):
+        if cookie or request.url.path.startswith(("/api/", "/imaging/")):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -105,6 +117,7 @@ def create_app(settings=None, agent=None, initialize_agent=True):
 
     @app.get("/simulation", include_in_schema=False)
     def workspace(request: Request):
+        identify_browser(request)
         return templates.TemplateResponse(
             request,
             "simulation.html",
@@ -159,7 +172,7 @@ def create_app(settings=None, agent=None, initialize_agent=True):
             data = decode(row["session_data"])
             for study in data.get("case_snapshot", {}).get("imaging_studies", []):
                 file_path = study.get("file_path", "")
-                if path == file_path or (
+                if path in (file_path, study.get("thumbnail")) or (
                     file_path.startswith("dicom/") and path.startswith(file_path + "/")
                 ):
                     return

@@ -18,6 +18,7 @@ pydicom>=2.4.0
 beautifulsoup4>=4.12.3
 fpdf2>=2.7.9
 langchain-core>=0.3.0
+filelock>=3.25.2
 
 # vLLM and GPU dependencies (for local testing with GPU)
 # Comment out if testing CPU-only mode

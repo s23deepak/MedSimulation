@@ -221,16 +221,17 @@ def generate_pdf(data: dict) -> bytes:
 
     # ── Score hero ─────────────────────────────────────────────────────────────
     sc = data["scores"]
-    pct = sc.get("percentage", 0)
+    pct = sc.get("percentage")
     pdf.set_font("Helvetica", "B", 34)
     pdf.set_text_color(*_TEAL)
     pdf.cell(0, 14, f"{pct:.0f}%" if pct is not None else "Unscored practice", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 10)
-    pdf.set_text_color(*_MUTED)
-    pdf.cell(0, 5,
-        _safe(f"{sc.get('grade', '')}  ({sc.get('total', 0)}/{sc.get('max_score', 100)})"),
-        align="C", new_x="LMARGIN", new_y="NEXT",
-    )
+    if sc.get("total") is not None:
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(*_MUTED)
+        pdf.cell(0, 5,
+            _safe(f"{sc.get('grade', '')}  ({sc.get('total', 0)}/{sc.get('max_score', 100)})"),
+            align="C", new_x="LMARGIN", new_y="NEXT",
+        )
     pdf.set_text_color(*_DARK)
     pdf.ln(3)
     body(data["disclaimer"])
@@ -331,37 +332,38 @@ def generate_pdf(data: dict) -> bytes:
         pdf.cell(6, 5, "-")
         pdf.multi_cell(pdf.epw - 6, 5, _safe(step), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
-    kv("Correct Diagnosis", asmt.get("correct_diagnosis", ""))
+    if sc.get("total") is not None:
+        kv("Correct Diagnosis", asmt.get("correct_diagnosis", ""))
 
-    # ── Domain score table ─────────────────────────────────────────────────────
-    section_header("Score Breakdown")
-    domain_scores = sc.get("domain_scores", {})
-    domain_feedback = sc.get("domain_feedback", {})
-    weight = data["case"].get("score_weights") or {
-        "history": 20, "exam": 20, "investigations": 20, "diagnosis": 25, "management": 15,
-    }
-    domains = [
-        ("History", "history"), ("Physical Exam", "exam"),
-        ("Investigations", "investigations"), ("Diagnosis", "diagnosis"),
-        ("Management", "management"),
-    ]
-    pdf.set_fill_color(*_GREY)
-    pdf.set_font("Helvetica", "B", 8)
-    pdf.cell(42, 7, "Domain", border=1, fill=True)
-    pdf.cell(18, 7, "Score", border=1, fill=True, align="C")
-    pdf.cell(14, 7, "Max", border=1, fill=True, align="C")
-    pdf.cell(0, 7, "Feedback", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
-    for label, key in domains:
-        got = domain_scores.get(key, 0)
-        max_w = weight.get(key, 20)
-        fb = (domain_feedback.get(key) or "")[:110]
-        if len(domain_feedback.get(key, "")) > 110:
-            fb += "..."
-        pdf.set_font("Helvetica", "", 8)
-        pdf.cell(42, 6, _safe(label), border=1)
-        pdf.cell(18, 6, str(got), border=1, align="C")
-        pdf.cell(14, 6, str(max_w), border=1, align="C")
-        pdf.multi_cell(pdf.epw - 74, 6, _safe(fb), border=1, new_x="LMARGIN", new_y="NEXT")
+        # ── Domain score table ─────────────────────────────────────────────────────
+        section_header("Score Breakdown")
+        domain_scores = sc.get("domain_scores", {})
+        domain_feedback = sc.get("domain_feedback", {})
+        weight = data["case"].get("score_weights") or {
+            "history": 20, "exam": 20, "investigations": 20, "diagnosis": 25, "management": 15,
+        }
+        domains = [
+            ("History", "history"), ("Physical Exam", "exam"),
+            ("Investigations", "investigations"), ("Diagnosis", "diagnosis"),
+            ("Management", "management"),
+        ]
+        pdf.set_fill_color(*_GREY)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.cell(42, 7, "Domain", border=1, fill=True)
+        pdf.cell(18, 7, "Score", border=1, fill=True, align="C")
+        pdf.cell(14, 7, "Max", border=1, fill=True, align="C")
+        pdf.cell(0, 7, "Feedback", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+        for label, key in domains:
+            got = domain_scores.get(key, 0)
+            max_w = weight.get(key, 20)
+            fb = (domain_feedback.get(key) or "")[:110]
+            if len(domain_feedback.get(key, "")) > 110:
+                fb += "..."
+            pdf.set_font("Helvetica", "", 8)
+            pdf.cell(42, 6, _safe(label), border=1)
+            pdf.cell(18, 6, str(got), border=1, align="C")
+            pdf.cell(14, 6, str(max_w), border=1, align="C")
+            pdf.multi_cell(pdf.epw - 74, 6, _safe(fb), border=1, new_x="LMARGIN", new_y="NEXT")
 
     # ── Debrief ────────────────────────────────────────────────────────────────
     section_header("Debrief")

@@ -22,27 +22,21 @@ function setupImaging(sessionData) {
         card.id = `img-card-${study.study_id}`;
         card.setAttribute('tabindex', '0');
 
-        // Check if we have a preview image (thumbnail or file_path)
-        const hasPreview = study.thumbnail || (study.file_path && study.file_path.startsWith('http'));
-        const previewUrl = study.thumbnail || study.file_path || '';
-
-        if (hasPreview) {
-            // Show image preview with modality badge
-            card.innerHTML = `
-                <div class="imaging-preview">
-                    <img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(study.modality)}" loading="lazy" />
-                </div>
-                <div class="imaging-modality-badge">${escapeHtml(study.modality)}</div>
-                <div class="imaging-desc">${escapeHtml(study.description)}</div>
-            `;
+        const previewUrl = study.thumbnail && safeMediaUrl(study.thumbnail);
+        if (previewUrl) {
+            const preview = document.createElement('div');
+            preview.className = 'imaging-preview';
+            const image = document.createElement('img');
+            image.alt = study.modality;
+            image.loading = 'lazy';
+            image.onerror = () => preview.replaceChildren(textNode('span', 'Preview unavailable'));
+            image.src = previewUrl;
+            preview.append(image);
+            card.append(preview, textNode('div', study.modality, 'imaging-modality-badge'));
         } else {
-            // Show modality icon (no preview available)
-            card.innerHTML = `
-                <div class="imaging-icon">${icon}</div>
-                <div class="imaging-modality">${escapeHtml(study.modality)}</div>
-                <div class="imaging-desc">${escapeHtml(study.description)}</div>
-            `;
+            card.append(textNode('div', icon, 'imaging-icon'), textNode('div', study.modality, 'imaging-modality'));
         }
+        card.append(textNode('div', study.description, 'imaging-desc'));
 
         const openStudy = () => openImagingStudy(study.study_id);
         card.onclick = openStudy;
@@ -88,18 +82,19 @@ async function openImagingStudy(studyId) {
         document.getElementById('lbContrast').closest('.lightbox-controls').style.display = 'none';
         document.getElementById('lightboxOverlay').classList.add('active');
         document.body.style.overflow = 'hidden';
-    } else if (data.image_url.startsWith('dicom/')) {
+    } else if (data.image_url.startsWith('/imaging/dicom/')) {
         body.innerHTML = `<div class="dicom-viewer" id="dicomViewer"><span class="spinner show dicom-spinner" id="dicomSpinner"></span></div>`;
         document.getElementById('lightboxOverlay').classList.add('active');
         document.body.style.overflow = 'hidden';
 
+        const element = document.getElementById('dicomViewer');
         try {
             const listRes = await apiFetch(`/api/simulation/imaging/dicom_list?case_id=${currentSession.case_id}`);
             const listData = await listRes.json();
             if (!listData.urls || listData.urls.length === 0) throw new Error("No DICOM slices found");
 
-            const element = document.getElementById('dicomViewer');
-            const spinner = document.getElementById('dicomSpinner');
+            if (!element.isConnected) return;
+            const spinner = element.querySelector('.dicom-spinner');
 
             cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
             cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
@@ -117,6 +112,7 @@ async function openImagingStudy(studyId) {
             };
 
             const image = await cornerstone.loadAndCacheImage(imageIds[stack.currentImageIdIndex]);
+            if (!element.isConnected) return;
             cornerstone.displayImage(element, image);
 
             cornerstoneTools.addStackStateManager(element, ['stack']);
@@ -134,33 +130,24 @@ async function openImagingStudy(studyId) {
             spinner.classList.remove('show');
         } catch (e) {
             console.error(e);
-            document.getElementById('dicomViewer').innerHTML = `<p class="dicom-error">Failed to load DICOM viewer: ${escapeHtml(e.message)}</p>`;
+            element.replaceChildren(textNode('p', 'Failed to load DICOM viewer: ' + e.message, 'dicom-error'));
         }
-    } else if (data.image_url.endsWith('.svg')) {
-        body.innerHTML = '<div class="lb-loading"><span class="spinner-dot"></span></div>';
-        try {
-            await apiFetch(safeMediaUrl(data.image_url));
-            const image = document.createElement('img');
-            image.id = 'lbImage';
-            image.alt = 'Imaging study';
-            image.src = safeMediaUrl(data.image_url);
-            body.replaceChildren(image);
-            setTimeout(() => initImagePan(), 100);
-        } catch (e) {
-            const image = document.createElement('img');
-            image.id = 'lbImage'; image.alt = 'Imaging study'; image.src = safeMediaUrl(data.image_url);
-            body.replaceChildren(image);
-        }
-        document.getElementById('lightboxOverlay').classList.add('active');
-        document.body.style.overflow = 'hidden';
-        setTimeout(() => initImagePan(), 100);
     } else {
+        const imageUrl = safeMediaUrl(data.image_url);
+        if (!imageUrl) throw new Error('Unsupported image location');
         const image = document.createElement('img');
-        image.id = 'lbImage'; image.alt = 'Imaging study'; image.src = safeMediaUrl(data.image_url);
+        image.id = 'lbImage';
+        image.alt = data.description || 'Imaging study';
+        image.onload = initImagePan;
+        image.onerror = () => {
+            if (body.contains(image)) {
+                body.replaceChildren(textNode('p', 'This figure is unavailable. Close and reopen the study to retry.', 'no-image-msg'));
+            }
+        };
         body.replaceChildren(image);
+        image.src = imageUrl;
         document.getElementById('lightboxOverlay').classList.add('active');
         document.body.style.overflow = 'hidden';
-        setTimeout(() => initImagePan(), 100);
     }
     } catch (error) {
         showToast(`Imaging unavailable: ${error.message}. Select the study to retry.`);
@@ -170,7 +157,11 @@ async function openImagingStudy(studyId) {
 function closeLightbox() {
     document.getElementById('lightboxOverlay').classList.remove('active');
     document.body.style.overflow = '';
-    document.getElementById('lbBody').innerHTML = '';
+    const viewer = document.getElementById('dicomViewer');
+    if (viewer && window.cornerstone?.getEnabledElements().some(item => item.element === viewer)) {
+        cornerstone.disable(viewer);
+    }
+    document.getElementById('lbBody').replaceChildren();
     const ctrl = document.getElementById('lbContrast');
     if (ctrl) ctrl.closest('.lightbox-controls').style.display = '';
     currentZoom = 100;  // Reset zoom when closing

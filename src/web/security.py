@@ -1,10 +1,23 @@
 """Temporary pilot identity and shared database rate limits."""
 
+import hashlib
+import re
+import secrets
 import time
 from fastapi import HTTPException, Request
 from src.simulation.database import _connect, load_session
 
-PILOT_USER = {"user_id": "pilot-learner", "role": "learner", "guest": True}
+
+def identify_browser(request: Request):
+    secure = request.url.scheme == "https" or request.app.state.settings.environment != "local"
+    name = "__Host-medsim_learner" if secure else "medsim_learner"
+    token = request.cookies.get(name, "")
+    if not re.fullmatch(r"[0-9a-f]{64}", token):
+        token = secrets.token_hex(32)
+        request.state.new_learner_cookie = (name, token, secure)
+    # Only a digest of the bearer credential appears in session and audit records.
+    owner = hashlib.sha256(token.encode("ascii")).hexdigest()
+    request.state.user = {"user_id": f"guest-{owner}", "role": "learner", "guest": True}
 
 
 def rate_limit(key, limit, seconds=60):
@@ -38,9 +51,9 @@ def current_user(request: Request):
             origin and origin not in allowed and origin != same_origin
         ):
             raise HTTPException(403, "Request origin not allowed")
-    user = dict(PILOT_USER)
-    request.state.user = user
-    return user
+    if not hasattr(request.state, "user"):
+        identify_browser(request)
+    return request.state.user
 
 
 def reviewer(request: Request):

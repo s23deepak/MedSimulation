@@ -71,6 +71,7 @@ image = (
         "sqlalchemy>=2.0",
         "psycopg[binary]>=3.2",
         "pillow>=11.0",
+        "filelock>=3.25.2",
         # vLLM and GPU dependencies
         "vllm>=0.6.0",
         "bitsandbytes>=0.46.1",
@@ -387,6 +388,7 @@ class VLLMService:
 
 @app.function(
     gpu=None,  # No GPU needed - just proxies to VLLMService
+    max_containers=1,  # This pilot serves SQLite from one mounted volume.
     cpu=2,     # 2 vCPUs sufficient for FastAPI proxy
     memory=1024,  # 1GB RAM
     scaledown_window=300,  # Shut down after 5 min idle
@@ -428,6 +430,7 @@ def serve():
     os.environ["ALLOW_HOSTED_SQLITE"] = "1"
     os.environ.pop("DATABASE_URL", None)
     os.environ["DATABASE_PATH"] = "/data/medsim.db"
+    os.environ["MEDSIM_SESSION_LOCK_DIR"] = "/tmp/medsim-session-locks"
     os.environ["DATA_DIR"] = "/data"
 
     # ── Source tree setup ───────────────────────────────────────────────────────
@@ -483,6 +486,7 @@ image_cpu = (
         "sqlalchemy>=2.0",
         "psycopg[binary]>=3.2",
         "pillow>=11.0",
+        "filelock>=3.25.2",
     )
     .add_local_dir("src", remote_path="/root/src")
     .add_local_dir("templates", remote_path="/root/templates")

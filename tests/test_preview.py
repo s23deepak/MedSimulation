@@ -1,6 +1,42 @@
 import sqlite3
+import sys
+from pathlib import Path
 
-from scripts.dev_preview import seed_local_cases
+import uvicorn
+
+from scripts.dev_preview import main, seed_local_cases
+from src.simulation import database
+from src.simulation.simulator import SimulationEngine
+
+
+def test_launcher_isolates_sessions_from_inherited_database_url(tmp_path, monkeypatch):
+    external = tmp_path / "external.db"
+    with sqlite3.connect(external) as conn:
+        conn.execute("CREATE TABLE sentinel (value TEXT)")
+        conn.execute("INSERT INTO sentinel VALUES ('keep')")
+    original = external.read_bytes()
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{external}")
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "missing-case-bank.db"))
+    monkeypatch.setattr(database, "_DB_PATH", str(external))
+    monkeypatch.setattr(sys, "argv", ["dev_preview.py"])
+    preview_files = []
+
+    def exercise_preview(app, **kwargs):
+        with database._connect() as conn:
+            active_file = Path(conn.execute("PRAGMA database_list").fetchone()["file"])
+        assert active_file == Path(database._DB_PATH) and active_file != external
+        session = SimulationEngine().start_session("Preview", "SIM-001", "preview-learner")
+        with sqlite3.connect(active_file) as conn:
+            assert conn.execute(
+                "SELECT status FROM sessions WHERE session_id=?", (session.session_id,)
+            ).fetchone() == ("active",)
+        preview_files.append(active_file)
+
+    monkeypatch.setattr(uvicorn, "run", exercise_preview)
+    main()
+
+    assert len(preview_files) == 1 and not preview_files[0].exists()
+    assert external.read_bytes() == original
 
 
 def test_preview_copies_cases_without_changing_source(tmp_path):

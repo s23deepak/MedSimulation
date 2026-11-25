@@ -35,5 +35,9 @@ def test_postgres_migration_review_session_audit(monkeypatch):
          TestClient(app, base_url='https://pilot.example') as second:
         session = first.post('/api/simulation/start', json={'case_id': data['case_id']})
         assert session.status_code == 200
+        cookie = session.headers['set-cookie']
+        assert '__Host-medsim_learner=' in cookie and 'Secure' in cookie and 'HttpOnly' in cookie
         session_id = session.json()['session_id']
+        assert second.get(f'/api/simulation/session/{session_id}').status_code == 404
+        second.cookies.update(first.cookies)
         assert second.get(f'/api/simulation/session/{session_id}').status_code == 200

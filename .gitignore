@@ -23,6 +23,7 @@ dist/
 # Databases
 *.sqlite
 *.sqlite3
+*.db.locks/
 *.db
 data/medsim.db
 

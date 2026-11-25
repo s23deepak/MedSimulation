@@ -1506,6 +1506,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "fastapi" },
+    { name = "filelock" },
     { name = "fpdf2" },
     { name = "httpx" },
     { name = "jinja2" },
@@ -1544,6 +1545,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.3" },
     { name = "bitsandbytes", marker = "extra == 'gpu'", specifier = ">=0.46.1" },
     { name = "fastapi", specifier = ">=0.128.4" },
+    { name = "filelock", specifier = ">=3.25.2" },
     { name = "fpdf2", specifier = ">=2.7.9" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1.6" },

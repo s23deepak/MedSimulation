@@ -8,8 +8,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from src.web.application import create_app
-from src.web.config import Settings
 
 
 class PreviewAgent:
@@ -50,22 +48,29 @@ def main() -> None:
     parser.add_argument('--port', type=int, default=8177)
     args = parser.parse_args()
     source = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'medsim.db')))
-    temporary = tempfile.TemporaryDirectory(prefix='medsim-preview-')
-    target = Path(temporary.name) / 'preview.db'
-    os.environ['DATABASE_PATH'] = str(target)
-    from src.simulation import database
-    database._DB_PATH = str(target)
-    database.init_db()
-    imported = seed_local_cases(source, target)
-    settings = Settings(environment='local', allowed_origins=[f'http://127.0.0.1:{args.port}'])
-    app = create_app(settings=settings, agent=PreviewAgent(), initialize_agent=False)
-    print(f'Local preview (no sign-in): http://127.0.0.1:{args.port}/simulation', flush=True)
-    print(f'Loaded {imported} existing cases into the temporary preview; source unchanged.', flush=True)
-    import uvicorn
-    try:
-        uvicorn.run(app, host='127.0.0.1', port=args.port)
-    finally:
-        temporary.cleanup()
+    with tempfile.TemporaryDirectory(prefix='medsim-preview-') as directory:
+        target = Path(directory) / 'preview.db'
+        # DATABASE_URL takes precedence over DATABASE_PATH in the storage adapter.
+        os.environ.pop('DATABASE_URL', None)
+        os.environ['DATABASE_PATH'] = str(target)
+
+        import uvicorn
+        from src.simulation import database
+        from src.web.application import create_app
+        from src.web.config import Settings
+
+        database._DB_PATH = str(target)
+        engine = database.engine_for(str(target))
+        try:
+            database.init_db()
+            imported = seed_local_cases(source, target)
+            settings = Settings(environment='local', allowed_origins=[f'http://127.0.0.1:{args.port}'])
+            app = create_app(settings=settings, agent=PreviewAgent(), initialize_agent=False)
+            print(f'Local preview (no sign-in): http://127.0.0.1:{args.port}/simulation', flush=True)
+            print(f'Loaded {imported} existing cases into the temporary preview; source unchanged.', flush=True)
+            uvicorn.run(app, host='127.0.0.1', port=args.port)
+        finally:
+            engine.dispose()
 
 if __name__ == '__main__':
     main()

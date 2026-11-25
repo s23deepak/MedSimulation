@@ -398,13 +398,22 @@ MedSimulation/
 
 ## 🗒️ Known Limitations / TODO
 
+### Reviewed project fixes
+
+- [x] Isolate each browser’s passwordless learner sessions, transcripts and media.
+- [x] Cache raster figures from supported publishers on first view and serve the thumbnail and full-size image from the same session URL.
+- [x] Open DICOM series in the stack viewer.
+- [x] Omit grades and score tables from unscored PDF reports.
+- [x] Serialize concurrent learner actions across workers sharing a SQLite database and lock directory. The hosted SQLite pilot runs one web container.
+- [x] Keep local preview writes in temporary SQLite storage even when the shell sets `DATABASE_URL`.
+
 ### Image Extraction
 
 **Hybrid Extraction Pipeline** (implemented):
 - **PMC (preferred)**: Direct extraction from PMC CDN — highest quality, no hotlink protection
 - **Direct scraping**: Publisher website scraping for Frontiers, PLOS, BMC — works well
 - **Firecrawl fallback**: JavaScript-rendered page scraping — handles dynamic content
-- **Screenshot fallback**: For hotlink-protected publishers (Wiley, Elsevier, Lancet) — captures full page screenshot with figure captions
+- **Screenshot fallback**: For hotlink-protected publishers (Wiley, Elsevier, Lancet) — captures a page viewport and extracts figure captions; it does not reliably extract individual figures
 
 **Publisher Support Matrix**:
 
@@ -414,15 +423,17 @@ MedSimulation/
 | **PLOS** | ✅ Full images | ✅ Screenshots | Direct + Firecrawl |
 | **Frontiers** | ✅ Full images | ✅ Direct URLs | Direct scraping |
 | **BMC** | ✅ Full images | ⚠️ Limited | Firecrawl (some blocking) |
-| **Wiley** | ✅ Full images | ✅ Screenshots | Screenshot fallback |
-| **Elsevier** | ✅ Full images | ✅ Screenshots | Screenshot fallback |
+| **Wiley** | ✅ Full images | ⚠️ Page preview | Screenshot fallback |
+| **Elsevier** | ✅ Full images | ⚠️ Page preview | Screenshot fallback |
 
 **Notes**:
-- Wiley/Elsevier use JavaScript to load images and have hotlink protection — screenshots show the full article page with figures visible
+- Wiley/Elsevier may use JavaScript-loaded or hotlink-protected images; a screenshot is only a page preview and may not show the figure named by its caption
 - Firecrawl free tier: 500 pages (one-time), then ~$16/mo for 3,000 pages
-- Screenshot extraction captures figure captions but links to full page view rather than individual images
+- Screenshot extraction can attach the same viewport screenshot to several captions; do not treat these as verified individual clinical images
+- **Image-to-case fidelity**: For one source at a time, extract the actual figure and its paired caption, store a verified local copy with source/figure provenance, check the image loads in the learner viewer, and require clinical review before using it for teaching or assessment. Reject a missing or mismatched figure instead of substituting a page screenshot. Show learners a neutral study label so source captions do not reveal the diagnosis. Cover ingestion, display, and reviewer checks end to end.
 
 ### UX & Clinical Realism
+- **Guided and challenge investigation modes**: In challenge mode, hide the case's preloaded investigation names from both the interface and learner API responses. Let learners request a test by name, match validated aliases to the case's available results, reveal a result only after the order, record unsupported requests, and return an unambiguous unavailable message. Keep the visible list as an optional guided mode; verify the full ordering and feedback flow before deployment.
 - **Lab/Imaging results for newly ordered tests**: When a resident orders a test not pre-loaded in the case (e.g. selecting a CBC mid-simulation), the UI currently returns "no result available." The system should dynamically generate plausible, case-consistent results for any ordered test rather than surfacing a dead-end.
 - ~~**Speech-to-text input for doctors**~~: Implemented with browser-native speech recognition, so residents can speak history questions without a paid transcription API.
 - ~~**Text-to-speech for patient responses**~~: Implemented with browser-native speech synthesis, so patient replies can be heard without a paid TTS API.

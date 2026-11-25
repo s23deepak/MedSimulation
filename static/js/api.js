@@ -17,7 +17,9 @@ function textNode(tag, value, className = '') {
 function safeMediaUrl(value) {
     try {
         const url = new URL(value, location.origin);
-        return url.origin === location.origin && /^\/(static|imaging)\//.test(url.pathname) ? url.href : '';
+        const allowed = /^\/(static|imaging)\//.test(url.pathname)
+            || /^\/api\/simulation\/session\/[\w-]+\/figures\/\d+$/.test(url.pathname);
+        return url.origin === location.origin && allowed ? url.href : '';
     } catch { return ''; }
 }
 

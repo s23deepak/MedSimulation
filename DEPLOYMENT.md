@@ -1,8 +1,7 @@
 # MedSimulation Deployment Guide
 
 For the temporary resident pilot, the app runs without built-in accounts or
-passwords. Anyone with the link can open the app as the shared `pilot-learner`
-identity. Use synthetic cases only and do not enter identifiable patient
+passwords. Anyone with the link can open the app with a private browser identity stored in an HTTP-only cookie. Use synthetic cases only and do not enter identifiable patient
 information. Reviewer actions are unavailable until third-party auth is added,
 and cases without clinical review remain unscored. The current Modal deployment
 uses SQLite on a persistent Modal volume via `ALLOW_HOSTED_SQLITE=1`; managed
