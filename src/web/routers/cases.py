@@ -10,6 +10,7 @@ from src.simulation.rubrics import draft_rubric
 from .. import case_generation
 from ..models import (
     CaseSummary,
+    RecommendedCase,
     CaseResult,
     CaseEdit,
     Engagement,
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/cases", tags=["cases"], dependencies=[Depends(current_user)])
 
 
-@router.get("/recommended", response_model=list[CaseSummary])
+@router.get("/recommended", response_model=list[RecommendedCase])
 def recommended(limit: int = Query(default=12, ge=1, le=100)):
     return database.get_recommended_cases(limit)
 

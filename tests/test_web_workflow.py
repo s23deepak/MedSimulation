@@ -74,10 +74,24 @@ def test_hosted_pilot_configuration(monkeypatch):
     with pytest.raises(ValueError, match='HTTPS'):
         Settings(environment='demo', allowed_origins=['http://pilot.example']).validate()
 
+def test_library_scoring_matches_reviewed_session(webapp):
+    _, client = webapp
+    case = CASES["SIM-001"]
+    assert database.approve_case(case.case_id, "reviewer", 1, "Reviewed", draft_rubric(case))
+    cases = client.get("/api/cases/recommended?limit=100").json()
+    summary = next(c for c in cases if c["case_id"] == case.case_id)
+    session = client.post("/api/simulation/start", json={"case_id": case.case_id}).json()
+    assert summary["scoring_available"] is session["scoring_available"] is True
+    assert summary["reviewer"] == "reviewer"
+    assert summary["learning_objectives"] == case.learning_objectives
+    assert "rubric" not in summary
+
+
 def test_auth_and_unscored_practice_export(webapp):
     app, client = webapp
     cases = client.get('/api/cases/recommended').json()
     assert cases and all(c['status'] == 'pending' for c in cases)
+    assert all(c['scoring_available'] is False for c in cases)
     assert all('correct_diagnosis' not in c for c in cases)
     session, result = complete(client)
     assert 'case_snapshot' not in session and 'owner_id' not in session

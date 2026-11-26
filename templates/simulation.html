@@ -15,6 +15,7 @@
         rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css?v=25">
     <link rel="stylesheet" href="/static/workflow.css?v=2">
+    <link rel="stylesheet" href="/static/case-library.css?v=1">
 </head>
 
 <body data-passwordless="{{ 'true' if passwordless_access else 'false' }}">
@@ -138,44 +139,34 @@
                 <aside class="practice-note">
                     <div class="panel-kicker">Educational Use</div>
                     <h2>Practice environment</h2>
-                    <p>Generated and imported cases should be treated as educational simulations. Reviewed source status is shown on each case card.</p>
+                    <p>Generated and imported cases are educational simulations. Each case shows its clinical review and scoring status.</p>
                 </aside>
             </div>
 
-            <section class="case-library-shell" id="case-library" aria-labelledby="caseLibraryTitle">
-                <div class="recommended-header">
-                    <div>
-                        <span class="dashboard-eyebrow">Case Library</span>
-                        <h2 class="section-title" id="caseLibraryTitle">Recommended cases</h2>
+            <section class="case-library" id="case-library" aria-labelledby="caseLibraryTitle">
+                <div class="library-heading">
+                    <h2 id="caseLibraryTitle">Recommended cases</h2>
+                    <span id="caseResultCount" role="status"></span>
+                </div>
+                <fieldset id="caseFilters" class="library-filters" aria-label="Filter cases" disabled>
+                    <label class="library-search">Search cases
+                        <input type="search" id="caseFilterInput" placeholder="Condition, presentation, or specialty" oninput="filterCases()">
+                    </label>
+                    <label>Specialty
+                        <select id="caseSpecialty" onchange="filterCases()"><option value="">All specialties</option></select>
+                    </label>
+                    <label>Difficulty
+                        <select id="caseDifficulty" onchange="filterCases()"><option value="">All levels</option></select>
+                    </label>
+                    <button id="caseFilterReset" class="library-link" type="button" onclick="clearCaseFilters()" hidden>Clear filters</button>
+                </fieldset>
+                <div id="caseResults" class="library-results" hidden>
+                    <div class="library-columns" aria-hidden="true">
+                        <span>Case</span><span>Difficulty</span><span>Review status</span>
                     </div>
-                    <div class="case-filter-wrapper">
-                        <input type="text" id="caseFilterInput" class="case-filter-input"
-                            placeholder="Filter by diagnosis, specialty, difficulty..."
-                            aria-label="Filter cases"
-                            oninput="filterCases()" />
-                        <button class="btn-clear-filter" onclick="clearCaseFilter()" title="Clear filter" aria-label="Clear filter">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M18 6L6 18M6 6l12 12"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <ul id="caseList" aria-label="Recommended cases" role="list"></ul>
                 </div>
-                <div class="library-toolbar" aria-label="Case filters">
-                    <span>All specialties</span>
-                    <span>Beginner to advanced</span>
-                    <span>Reviewed and generated</span>
-                </div>
-                <div id="caseGrid" class="case-grid" role="list">
-                    <div class="skeleton skeleton-card" aria-hidden="true"></div>
-                    <div class="skeleton skeleton-card" aria-hidden="true"></div>
-                    <div class="skeleton skeleton-card" aria-hidden="true"></div>
-                    <div class="skeleton skeleton-card" aria-hidden="true"></div>
-                    <div class="skeleton skeleton-card" aria-hidden="true"></div>
-                    <div class="skeleton skeleton-card" aria-hidden="true"></div>
-                </div>
-                <p id="noCasesMessage" class="no-cases-message" style="display:none;">
-                    No matching cases found. Try a different keyword or <button class="btn-link" onclick="clearCaseFilter()">clear filter</button>.
-                </p>
+                <div class="library-message" id="caseMessage" role="status">Loading cases…</div>
             </section>
 
             <input type="hidden" id="residentName" value="Learner" />
@@ -517,7 +508,7 @@
     <script src="/static/js/state.js" defer></script>
     <script src="/static/js/voice.js?v=2" defer></script>
     <script src="/static/js/navigation.js" defer></script>
-    <script src="/static/js/cases.js" defer></script>
+    <script src="/static/js/cases.js?v=2" defer></script>
     <script src="/static/js/workspace.js?v=2" defer></script>
     <script src="/static/js/imaging.js?v=2" defer></script>
     <script src="/static/js/encounter.js" defer></script>

@@ -7,6 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 DOMAINS = ("history", "exam", "investigations", "diagnosis", "management")
 
 
+def numeric_scoring_available(status: str, rubric: dict | None) -> bool:
+    return status == "approved" and bool(rubric)
+
+
 class Item(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=100)

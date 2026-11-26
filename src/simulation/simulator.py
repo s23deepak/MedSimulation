@@ -26,6 +26,7 @@ from .chat_chain import (
     PATIENT_PROMPT_HASH, PATIENT_PROMPT_VERSION, build_patient_chain, clear_session_history,
 )
 from .scorer import score_session
+from .rubrics import numeric_scoring_available
 from .debrief import generate_debrief
 from .imaging import get_image_url
 from .figures import publisher_figure_url
@@ -94,7 +95,7 @@ class SimulationSession:
             "review_status": self.case.status,
             "reviewer": self.case.reviewer,
             "approved_at": self.case.approved_at,
-            "scoring_available": self.case.status == "approved" and bool(self.case.rubric),
+            "scoring_available": numeric_scoring_available(self.case.status, self.case.rubric),
             "available_exams": list(self.case.physical_exam),
             "available_investigations": list(self.case.investigations),
             "resident_name": self.resident_name,
@@ -425,7 +426,7 @@ class SimulationEngine:
     def _complete_scoring(self, session, session_id: str) -> dict:
         """Complete full scoring (rule-based + AI) synchronously."""
         from .safety import DISCLAIMER
-        if session.case.status == "approved" and session.case.rubric:
+        if numeric_scoring_available(session.case.status, session.case.rubric):
             score_result = score_session(session, agent=self.agent)
             session.score = score_result.to_dict()
             session.debrief = generate_debrief(session, score_result, agent=self.agent).to_dict()

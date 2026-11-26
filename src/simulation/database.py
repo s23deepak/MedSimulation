@@ -9,6 +9,7 @@ from pathlib import Path
 from .bandits import BanditState, ThompsonSamplingBandit
 from .cases import CASES, ClinicalCase, _register
 from .migrations import migrate
+from .rubrics import numeric_scoring_available
 from .safety import check_case
 from .storage import Connection, engine_for
 
@@ -337,6 +338,7 @@ def get_recommended_cases(limit=12):
     for record in ranked_records:
         data = case_record(record["case_id"])
         record["learning_objectives"] = data.get("learning_objectives", [])
+        record["scoring_available"] = numeric_scoring_available(data["status"], data.get("rubric"))
         record["_arm_id"] = f"{record['specialty']}_{record['difficulty']}".lower().replace(" ", "_")
         result.append(record)
     return result

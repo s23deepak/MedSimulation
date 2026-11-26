@@ -213,6 +213,10 @@ class CaseSummary(BaseModel):
     learning_objectives: list[str] = Field(default_factory=list)
 
 
+class RecommendedCase(CaseSummary):
+    scoring_available: bool
+
+
 class CaseResult(BaseModel):
     case_id: str
     title: str = ""
